@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Balance Simulation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="formContainer">
+    <h1>Balance Simulation</h1>
+    <form id="userForm">
+      <label for="age">Age:</label>
+      <input type="number" id="age" name="age" required>
+      
+      <label for="gender">Gender:</label>
+      <select id="gender" name="gender" required>
+        <option value="">Select...</option>
+        <option value="male">Male</option>
+        <option value="female">Female</option>
+        <option value="other">Other</option>
+      </select>
+      
+      <label for="height">Height (cm):</label>
+      <input type="number" id="height" name="height" required>
+      
+      <label for="weight">Weight (kg):</label>
+      <input type="number" id="weight" name="weight" required>
+      
+      <label for="footwear">Type of Footwear:</label>
+      <select id="footwear" name="footwear" required>
+        <option value="">Select...</option>
+        <option value="barefoot">Barefoot</option>
+        <option value="sneakers">Sneakers</option>
+        <option value="boots">Boots</option>
+        <option value="heels">Heels</option>
+      </select>
+      
+      <button type="submit">Start Simulation</button>
+    </form>
+  </div>
+  
+  <div id="simulationContainer" style="display: none;">
+    <h2>Your Simulation</h2>
+    <canvas id="simulationCanvas" width="500" height="500"></canvas>
+    
+    <div id="controls">
+      <div class="control">
+        <label for="copRange">Center-of-Pressure (COP) Adjustment:</label>
+        <input type="range" id="copRange" min="-50" max="50" value="0">
+      </div>
+      <div class="control">
+        <label for="forceRange">Applied Force (N):</label>
+        <input type="range" id="forceRange" min="0" max="100" value="0">
+      </div>
+      <div class="control">
+        <label for="surfaceType">Surface Type:</label>
+        <select id="surfaceType">
+          <option value="firm">Firm</option>
+          <option value="soft">Soft</option>
+          <option value="uneven">Uneven</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  
+  <script src="script.js"></script>
+</body>
+</html>
