@@ -1,68 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Balance Simulation</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Colombia Socioeconomic Vulnerability Map</title>
+  <!-- Mapbox GL JS CSS -->
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
-  <div id="formContainer">
-    <h1>Balance Simulation</h1>
-    <form id="userForm">
-      <label for="age">Age:</label>
-      <input type="number" id="age" name="age" required>
-      
-      <label for="gender">Gender:</label>
-      <select id="gender" name="gender" required>
-        <option value="">Select...</option>
-        <option value="male">Male</option>
-        <option value="female">Female</option>
-        <option value="other">Other</option>
-      </select>
-      
-      <label for="height">Height (cm):</label>
-      <input type="number" id="height" name="height" required>
-      
-      <label for="weight">Weight (kg):</label>
-      <input type="number" id="weight" name="weight" required>
-      
-      <label for="footwear">Type of Footwear:</label>
-      <select id="footwear" name="footwear" required>
-        <option value="">Select...</option>
-        <option value="barefoot">Barefoot</option>
-        <option value="sneakers">Sneakers</option>
-        <option value="boots">Boots</option>
-        <option value="heels">Heels</option>
-      </select>
-      
-      <button type="submit">Start Simulation</button>
-    </form>
-  </div>
-  
-  <div id="simulationContainer" style="display: none;">
-    <h2>Your Simulation</h2>
-    <canvas id="simulationCanvas" width="500" height="500"></canvas>
-    
-    <div id="controls">
-      <div class="control">
-        <label for="copRange">Center-of-Pressure (COP) Adjustment:</label>
-        <input type="range" id="copRange" min="-50" max="50" value="0">
-      </div>
-      <div class="control">
-        <label for="forceRange">Applied Force (N):</label>
-        <input type="range" id="forceRange" min="0" max="100" value="0">
-      </div>
-      <div class="control">
-        <label for="surfaceType">Surface Type:</label>
-        <select id="surfaceType">
-          <option value="firm">Firm</option>
-          <option value="soft">Soft</option>
-          <option value="uneven">Uneven</option>
-        </select>
+  <header>
+    <h1>Colombia Socioeconomic Vulnerability Index</h1>
+  </header>
+
+  <div class="container">
+    <!-- Container for Map -->
+    <div id="map"></div>
+
+    <!-- Sidebar for controls -->
+    <div id="ui-container">
+      <div class="panel">
+        <h2>Vulnerability Index</h2>
+        <p>Based on water access, education, and employment indicators</p>
+        
+        <div class="control-section">
+          <h3>Selected Year: <span id="current-year">2019</span></h3>
+          
+          <!-- Time Slider -->
+          <div id="slider-container">
+            <input type="range" id="yearSlider" min="2007" max="2019" value="2019" step="1" />
+            <div class="slider-labels">
+              <span>2007</span>
+              <span>2019</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-section">
+          <h3>Vulnerability Legend</h3>
+          <div class="legend-container">
+            <div id="vulnerability-bar">
+              <!-- The gradient bar (green -> yellow -> red) -->
+              <div id="bar-gradient"></div>
+              <!-- The arrow/line pointer that moves on hover -->
+              <div id="bar-indicator" style="display: none;">
+                <div id="bar-indicator-line"></div>
+                <span id="bar-indicator-value"></span>
+              </div>
+            </div>
+            <div class="legend-labels">
+              <span>Low</span>
+              <span>High</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-section">
+          <h3>Map Layers</h3>
+          <!-- Dengue Overlay Checkbox -->
+          <div class="checkbox-container">
+            <input type="checkbox" id="dengueOverlay" />
+            <label for="dengueOverlay">Show Dengue Cases</label>
+          </div>
+          <!-- Vulnerability Components -->
+          <div class="checkbox-container">
+            <input type="checkbox" id="showComponents" />
+            <label for="showComponents">Show Component Breakdown</label>
+          </div>
+        </div>
+
+        <div id="municipality-info" class="control-section">
+          <h3>Municipality Data</h3>
+          <p class="info-message">Hover over a municipality to see details</p>
+          <div id="municipality-details" style="display: none;">
+            <h4 id="municipality-name">-</h4>
+            <p>Population: <span id="municipality-population">-</span></p>
+            <div class="vulnerability-score">
+              <span>Overall Vulnerability:</span>
+              <span id="vulnerability-score">-</span>
+            </div>
+            <div id="component-breakdown">
+              <div class="component">
+                <span>Water Access Vulnerability:</span>
+                <span id="water-score">-</span>
+              </div>
+              <div class="component">
+                <span>Education Vulnerability:</span>
+                <span id="education-score">-</span>
+              </div>
+              <div class="component">
+                <span>Employment Vulnerability:</span>
+                <span id="employment-score">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  
+
+  <!-- Mapbox GL JS -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  <!-- Your JS Code -->
   <script src="script.js"></script>
 </body>
 </html>
