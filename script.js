@@ -8,6 +8,9 @@ let currentYear = 2019;
 let dengueOverlayVisible = false;
 let showComponentsVisible = false;
 let hoveredMunicipalityId = null;
+let mapLoaded = false;
+let csvLoaded = false;
+let geojsonLoaded = false;
 
 // Initialize the map with Colombia centered
 const map = new mapboxgl.Map({
@@ -17,123 +20,81 @@ const map = new mapboxgl.Map({
   zoom: 5
 });
 
+// Show loading message
+function showLoadingMessage(message) {
+  const loadingDiv = document.createElement('div');
+  loadingDiv.id = 'loading-message';
+  loadingDiv.style.position = 'absolute';
+  loadingDiv.style.top = '50%';
+  loadingDiv.style.left = '50%';
+  loadingDiv.style.transform = 'translate(-50%, -50%)';
+  loadingDiv.style.padding = '20px';
+  loadingDiv.style.background = 'rgba(255, 255, 255, 0.9)';
+  loadingDiv.style.borderRadius = '5px';
+  loadingDiv.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+  loadingDiv.style.zIndex = '1000';
+  loadingDiv.innerHTML = `<strong>${message}</strong><br><small>This may take a moment...</small>`;
+  document.body.appendChild(loadingDiv);
+}
+
+// Hide loading message
+function hideLoadingMessage() {
+  const loadingDiv = document.getElementById('loading-message');
+  if (loadingDiv) {
+    loadingDiv.remove();
+  }
+}
+
 // Initialize the application
 async function initApp() {
+  showLoadingMessage('Loading map and data...');
+  
   try {
+    // Set up map load event first
+    map.on('load', () => {
+      console.log("Map base loaded");
+      mapLoaded = true;
+      attemptRenderMap();
+    });
+
     // 1. Load CSV data
     await loadCSVData();
+    csvLoaded = true;
     
     // 2. Set up UI controls
     setupUIControls();
 
-    // 3. Initialize map when it's loaded
-    map.on('load', async () => {
-      // Load and add custom GeoJSON
-      await loadGeoJSON();
+    // 3. Load GeoJSON in parallel
+    loadGeoJSON().then(() => {
+      geojsonLoaded = true;
+      attemptRenderMap();
+    }).catch(error => {
+      console.error("GeoJSON load error:", error);
+      alert(`Error loading GeoJSON: ${error.message}. Check console for details.`);
+      hideLoadingMessage();
     });
   } catch (error) {
     console.error('Error initializing application:', error);
     alert('There was an error loading the application. Please check the console for details.');
+    hideLoadingMessage();
   }
 }
 
-// Load CSV data with municipality information
-async function loadCSVData() {
-  try {
-    const response = await fetch('metadata.csv');
-    if (!response.ok) {
-      throw new Error(`Failed to fetch CSV: ${response.status} ${response.statusText}`);
-    }
-    
-    const csvText = await response.text();
-    console.log("CSV loaded, processing data...");
-
-    // Parse CSV using PapaParse
-    Papa.parse(csvText, {
-      header: true,
-      dynamicTyping: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        // Process the data
-        results.data.forEach(row => {
-          if (!row['Municipality code'] || !row.Municipality) return;
-          
-          const code = row['Municipality code'].toString();
-          
-          if (!municipalitiesData[code]) {
-            municipalitiesData[code] = {};
-          }
-          
-          // Extract population and socioeconomic data for each year
-          for (let year = 2007; year <= 2019; year++) {
-            if (row[`Population${year}`] > 0) {
-              municipalitiesData[code][year] = {
-                name: row.Municipality,
-                population: row[`Population${year}`],
-                waterAccess: row['Householdswithoutwateraccess(%)'],
-                education: row['Secondary/HigherEducation(%)'],
-                employment: row['Employedpopulation(%)'],
-                dengueCases: row[`Cases${year}`] || 0,
-              };
-            }
-          }
-        });
-        
-        console.log(`CSV data loaded successfully (${Object.keys(municipalitiesData).length} municipalities)`);
-      },
-      error: (error) => {
-        throw new Error('Error parsing CSV: ' + error.message);
-      }
-    });
-  } catch (error) {
-    console.error('Error loading CSV data:', error);
-    throw error;
+// Attempt to render map when all resources are ready
+function attemptRenderMap() {
+  if (mapLoaded && csvLoaded && geojsonLoaded) {
+    console.log("All resources loaded, rendering map");
+    renderMap();
+    hideLoadingMessage();
+  } else {
+    console.log(`Waiting for resources - Map: ${mapLoaded}, CSV: ${csvLoaded}, GeoJSON: ${geojsonLoaded}`);
   }
 }
 
-// Load GeoJSON with municipality boundaries
-async function loadGeoJSON() {
+// Render the map once all resources are loaded
+function renderMap() {
   try {
-    // Always fetch a new copy to avoid caching
-    const response = await fetch('municipios_GeoJSON.geojson');
-    if (!response.ok) {
-      throw new Error(`Failed to fetch GeoJSON: ${response.status} ${response.statusText}`);
-    }
-    
-    // Use let instead of const so we can reassign it
-    let data = await response.json();
-    
-    // Log the structure of the GeoJSON for debugging
-    console.log("GeoJSON loaded - structure analysis:");
-    console.log(`Type: ${data.type}, Features: ${data.features ? data.features.length : 0}`);
-    
-    if (data.features && data.features.length > 0) {
-      const sample = data.features[0];
-      console.log("First feature properties:", Object.keys(sample.properties));
-      console.log("First feature ID:", sample.id);
-      console.log("Geometry type:", sample.geometry.type);
-      
-      // Get bounding box of the data to check position
-      const bounds = getBoundingBox(data);
-      console.log("Data bounds:", bounds);
-      
-      // Check if bounds are in a reasonable range for Colombia
-      const isInColombia = 
-        bounds.minLng > -85 && bounds.maxLng < -60 && 
-        bounds.minLat > -5 && bounds.maxLat < 15;
-      
-      console.log("Data appears to be in Colombia region:", isInColombia);
-      
-      if (!isInColombia) {
-        console.log("Data appears to be outside Colombia region, will transform");
-        data = transformGeoJSONToColombiaRegion(data);
-      }
-    }
-    
-    // Store the processed GeoJSON
-    geojsonData = data;
-    
-    // Add our custom GeoJSON source if it doesn't already exist
+    // Add the source if it doesn't exist
     if (!map.getSource('municipalities')) {
       map.addSource('municipalities', {
         type: 'geojson',
@@ -188,9 +149,6 @@ async function loadGeoJSON() {
       
       // Set up map interactions once layers are added
       setupMapInteractions();
-    } else {
-      // Just update the data if source already exists
-      map.getSource('municipalities').setData(geojsonData);
     }
     
     // Update map layers with vulnerability data
@@ -199,10 +157,161 @@ async function loadGeoJSON() {
     // Focus the map on the data
     fitMapToData();
     
-    console.log('GeoJSON data loaded and displayed successfully');
+    console.log('Map rendered successfully');
+  } catch (error) {
+    console.error('Error rendering map:', error);
+    alert(`Error rendering map: ${error.message}`);
+  }
+}
+
+// Load CSV data with municipality information
+async function loadCSVData() {
+  try {
+    console.log("Attempting to load CSV data...");
+    // Try different relative paths that might work on GitHub Pages
+    const possiblePaths = ['metadata.csv', './metadata.csv', '/metadata.csv'];
+    let response = null;
+    let success = false;
+    
+    for (const path of possiblePaths) {
+      try {
+        console.log(`Trying to fetch CSV from: ${path}`);
+        response = await fetch(path);
+        if (response.ok) {
+          success = true;
+          console.log(`Successfully loaded CSV from: ${path}`);
+          break;
+        }
+      } catch (e) {
+        console.log(`Failed to fetch from ${path}:`, e.message);
+      }
+    }
+    
+    if (!success) {
+      throw new Error(`Failed to load CSV: ${response ? response.status : 'all paths failed'}`);
+    }
+    
+    const csvText = await response.text();
+    console.log(`CSV loaded (${csvText.length} bytes), parsing...`);
+
+    // Parse CSV using PapaParse
+    Papa.parse(csvText, {
+      header: true,
+      dynamicTyping: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        // Process the data
+        results.data.forEach(row => {
+          if (!row['Municipality code'] || !row.Municipality) return;
+          
+          const code = row['Municipality code'].toString();
+          
+          if (!municipalitiesData[code]) {
+            municipalitiesData[code] = {};
+          }
+          
+          // Extract population and socioeconomic data for each year
+          for (let year = 2007; year <= 2019; year++) {
+            if (row[`Population${year}`] > 0) {
+              municipalitiesData[code][year] = {
+                name: row.Municipality,
+                population: row[`Population${year}`],
+                waterAccess: row['Householdswithoutwateraccess(%)'],
+                education: row['Secondary/HigherEducation(%)'],
+                employment: row['Employedpopulation(%)'],
+                dengueCases: row[`Cases${year}`] || 0,
+              };
+            }
+          }
+        });
+        
+        console.log(`CSV data loaded successfully (${Object.keys(municipalitiesData).length} municipalities)`);
+      },
+      error: (error) => {
+        throw new Error('Error parsing CSV: ' + error.message);
+      }
+    });
+  } catch (error) {
+    console.error('Error loading CSV data:', error);
+    throw error;
+  }
+}
+
+// Load GeoJSON with municipality boundaries
+async function loadGeoJSON() {
+  try {
+    console.log("Attempting to load GeoJSON...");
+    // Try different relative paths that might work on GitHub Pages
+    const possiblePaths = [
+      'municipios_GeoJSON.geojson', 
+      './municipios_GeoJSON.geojson', 
+      '/municipios_GeoJSON.geojson',
+      'Municipios_GeoJSON.geojson', // Case sensitive check
+      './Municipios_GeoJSON.geojson'
+    ];
+    
+    let response = null;
+    let success = false;
+    
+    for (const path of possiblePaths) {
+      try {
+        console.log(`Trying to fetch GeoJSON from: ${path}`);
+        response = await fetch(path);
+        if (response.ok) {
+          success = true;
+          console.log(`Successfully loaded GeoJSON from: ${path}`);
+          break;
+        }
+      } catch (e) {
+        console.log(`Failed to fetch from ${path}:`, e.message);
+      }
+    }
+    
+    if (!success) {
+      throw new Error(`Failed to load GeoJSON: ${response ? response.status : 'all paths failed'}`);
+    }
+    
+    // Use let instead of const so we can reassign it
+    let data = await response.json();
+    
+    // Log the structure of the GeoJSON for debugging
+    console.log("GeoJSON loaded - structure analysis:");
+    console.log(`Type: ${data.type}, Features: ${data.features ? data.features.length : 0}`);
+    
+    if (data.features && data.features.length > 0) {
+      const sample = data.features[0];
+      console.log("First feature properties:", Object.keys(sample.properties));
+      console.log("First feature ID:", sample.id);
+      console.log("Geometry type:", sample.geometry.type);
+      
+      if (sample.geometry.coordinates && sample.geometry.coordinates.length > 0) {
+        console.log("Sample coordinates:", JSON.stringify(sample.geometry.coordinates[0][0]).substring(0, 100) + "...");
+      }
+      
+      // Get bounding box of the data to check position
+      const bounds = getBoundingBox(data);
+      console.log("Data bounds:", bounds);
+      
+      // Check if bounds are in a reasonable range for Colombia
+      const isInColombia = 
+        bounds.minLng > -85 && bounds.maxLng < -60 && 
+        bounds.minLat > -5 && bounds.maxLat < 15;
+      
+      console.log("Data appears to be in Colombia region:", isInColombia);
+      
+      if (!isInColombia) {
+        console.log("Data appears to be outside Colombia region, will transform");
+        data = transformGeoJSONToColombiaRegion(data);
+      }
+    }
+    
+    // Store the processed GeoJSON
+    geojsonData = data;
+    console.log('GeoJSON processing complete');
+    return data;
   } catch (error) {
     console.error('Error loading GeoJSON:', error);
-    alert(`Error loading municipality boundaries: ${error.message}`);
+    throw error;
   }
 }
 
