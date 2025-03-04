@@ -64,13 +64,13 @@ async function initApp() {
     // 2. Set up UI controls
     setupUIControls();
 
-    // 3. Load GeoJSON in parallel
-    loadGeoJSON().then(() => {
+    // 3. Load JSON Map in parallel
+    loadColumbiaMap().then(() => {
       geojsonLoaded = true;
       attemptRenderMap();
     }).catch(error => {
-      console.error("GeoJSON load error:", error);
-      alert(`Error loading GeoJSON: ${error.message}. Check console for details.`);
+      console.error("Columbia map load error:", error);
+      alert(`Error loading map data: ${error.message}. Check console for details.`);
       hideLoadingMessage();
     });
   } catch (error) {
@@ -237,17 +237,15 @@ async function loadCSVData() {
   }
 }
 
-// Load GeoJSON with municipality boundaries
-async function loadGeoJSON() {
+// Load Columbia Map JSON
+async function loadColumbiaMap() {
   try {
-    console.log("Attempting to load GeoJSON...");
+    console.log("Attempting to load Columbia Map...");
     // Try different relative paths that might work on GitHub Pages
     const possiblePaths = [
-      'municipios_GeoJSON.geojson', 
-      './municipios_GeoJSON.geojson', 
-      '/municipios_GeoJSON.geojson',
-      'Municipios_GeoJSON.geojson', // Case sensitive check
-      './Municipios_GeoJSON.geojson'
+      'columbiaMap.json', 
+      './columbiaMap.json', 
+      '/columbiaMap.json'
     ];
     
     let response = null;
@@ -255,11 +253,11 @@ async function loadGeoJSON() {
     
     for (const path of possiblePaths) {
       try {
-        console.log(`Trying to fetch GeoJSON from: ${path}`);
+        console.log(`Trying to fetch Columbia Map from: ${path}`);
         response = await fetch(path);
         if (response.ok) {
           success = true;
-          console.log(`Successfully loaded GeoJSON from: ${path}`);
+          console.log(`Successfully loaded Columbia Map from: ${path}`);
           break;
         }
       } catch (e) {
@@ -268,51 +266,122 @@ async function loadGeoJSON() {
     }
     
     if (!success) {
-      throw new Error(`Failed to load GeoJSON: ${response ? response.status : 'all paths failed'}`);
+      throw new Error(`Failed to load Columbia Map: ${response ? response.status : 'all paths failed'}`);
     }
     
-    // Use let instead of const so we can reassign it
-    let data = await response.json();
+    // Parse the JSON data
+    let mapData = await response.json();
     
-    // Log the structure of the GeoJSON for debugging
-    console.log("GeoJSON loaded - structure analysis:");
-    console.log(`Type: ${data.type}, Features: ${data.features ? data.features.length : 0}`);
+    // Log the structure of the JSON for debugging
+    console.log("Columbia Map loaded - analyzing structure:");
     
-    if (data.features && data.features.length > 0) {
-      const sample = data.features[0];
+    // Check if it's already in GeoJSON format or needs conversion
+    if (mapData.type === 'FeatureCollection' && Array.isArray(mapData.features)) {
+      console.log("Columbia Map is in GeoJSON format");
+      
+      // Process GeoJSON features to ensure they have the required properties
+      mapData.features = mapData.features.map((feature, index) => {
+        // Ensure each feature has an ID
+        if (!feature.id) {
+          feature.id = `municipality-${index}`;
+        }
+        
+        // Ensure each feature has properties
+        if (!feature.properties) {
+          feature.properties = {};
+        }
+        
+        return feature;
+      });
+      
+      geojsonData = mapData;
+    } else {
+      console.log("Columbia Map is not in standard GeoJSON format, attempting conversion");
+      // If it's not in GeoJSON format, we need to convert it
+      geojsonData = convertToGeoJSON(mapData);
+    }
+    
+    if (geojsonData.features && geojsonData.features.length > 0) {
+      const sample = geojsonData.features[0];
+      console.log(`Found ${geojsonData.features.length} features in the map`);
       console.log("First feature properties:", Object.keys(sample.properties));
-      console.log("First feature ID:", sample.id);
-      console.log("Geometry type:", sample.geometry.type);
       
-      if (sample.geometry.coordinates && sample.geometry.coordinates.length > 0) {
-        console.log("Sample coordinates:", JSON.stringify(sample.geometry.coordinates[0][0]).substring(0, 100) + "...");
-      }
-      
-      // Get bounding box of the data to check position
-      const bounds = getBoundingBox(data);
-      console.log("Data bounds:", bounds);
-      
-      // Check if bounds are in a reasonable range for Colombia
-      const isInColombia = 
-        bounds.minLng > -85 && bounds.maxLng < -60 && 
-        bounds.minLat > -5 && bounds.maxLat < 15;
-      
-      console.log("Data appears to be in Colombia region:", isInColombia);
-      
-      if (!isInColombia) {
-        console.log("Data appears to be outside Colombia region, will transform");
-        data = transformGeoJSONToColombiaRegion(data);
+      if (sample.geometry && sample.geometry.coordinates) {
+        console.log("First feature geometry type:", sample.geometry.type);
+        if (sample.geometry.coordinates.length > 0) {
+          // Print a snippet of the coordinates
+          const coordSample = JSON.stringify(sample.geometry.coordinates).substring(0, 100);
+          console.log(`Coordinate sample: ${coordSample}...`);
+        }
       }
     }
     
-    // Store the processed GeoJSON
-    geojsonData = data;
-    console.log('GeoJSON processing complete');
-    return data;
+    return geojsonData;
   } catch (error) {
-    console.error('Error loading GeoJSON:', error);
+    console.error('Error loading Columbia Map:', error);
     throw error;
   }
+}
+
+// Convert non-GeoJSON data to GeoJSON format if needed
+function convertToGeoJSON(data) {
+  // This is a placeholder function that you may need to customize
+  // based on the actual structure of your columbiaMap.json
+  
+  console.log("Converting data to GeoJSON format");
+  
+  // Create a basic GeoJSON structure
+  const geojson = {
+    type: "FeatureCollection",
+    features: []
+  };
+  
+  // Logic to convert the specific format of your JSON to GeoJSON
+  // This will depend on the structure of your columbiaMap.json
+  
+  // Example conversion (you will need to adjust this):
+  if (Array.isArray(data)) {
+    // If data is an array of objects, convert each to a feature
+    geojson.features = data.map((item, index) => {
+      return {
+        type: "Feature",
+        id: `municipality-${index}`,
+        properties: {
+          // Copy all properties from the item
+          ...item.properties || item,
+          // Add any additional properties needed
+          name: item.name || item.properties?.name || `Municipality ${index}`
+        },
+        geometry: item.geometry || { 
+          // Default geometry if not provided
+          type: "Polygon",
+          coordinates: item.coordinates || []
+        }
+      };
+    });
+  } else if (data.municipalities || data.regions || data.areas) {
+    // If data has a collection of municipalities under a specific key
+    const municipalities = data.municipalities || data.regions || data.areas || [];
+    
+    geojson.features = municipalities.map((item, index) => {
+      return {
+        type: "Feature",
+        id: item.id || `municipality-${index}`,
+        properties: {
+          // Copy all properties
+          ...item.properties || item,
+          name: item.name || item.properties?.name || `Municipality ${index}`
+        },
+        geometry: item.geometry || {
+          type: "Polygon",
+          coordinates: item.coordinates || []
+        }
+      };
+    });
+  }
+  
+  console.log(`Converted to GeoJSON with ${geojson.features.length} features`);
+  return geojson;
 }
 
 // Calculate bounding box for GeoJSON data
@@ -358,82 +427,6 @@ function getBoundingBox(geojson) {
   return bounds;
 }
 
-// Transform GeoJSON to be in Colombia's region if it's not
-function transformGeoJSONToColombiaRegion(geojson) {
-  console.log("Transforming GeoJSON to Colombia region");
-  
-  // Deep clone to avoid modifying the original
-  const transformedGeoJSON = JSON.parse(JSON.stringify(geojson));
-  
-  // Calculate current bounds
-  const currentBounds = getBoundingBox(geojson);
-  
-  // Target bounds for Colombia (approximate)
-  const targetBounds = {
-    minLng: -79, maxLng: -67,
-    minLat: -4, maxLat: 12
-  };
-  
-  // Apply transformation to each feature
-  transformedGeoJSON.features.forEach((feature, index) => {
-    // Ensure each feature has an ID
-    if (!feature.id) {
-      feature.id = `municipality-${index}`;
-    }
-    
-    if (feature.geometry && feature.geometry.coordinates) {
-      feature.geometry.coordinates = transformCoordinates(
-        feature.geometry.coordinates, 
-        feature.geometry.type,
-        currentBounds,
-        targetBounds
-      );
-    }
-  });
-  
-  console.log("GeoJSON transformation complete");
-  return transformedGeoJSON;
-}
-
-// Transform coordinates from source bounds to target bounds
-function transformCoordinates(coordinates, geometryType, sourceBounds, targetBounds) {
-  // Function to transform a single coordinate
-  const transformPoint = (coord) => {
-    if (!Array.isArray(coord)) return coord;
-    
-    const [lng, lat] = coord;
-    
-    // Normalize to 0-1 range based on source bounds
-    const normalizedLng = (lng - sourceBounds.minLng) / (sourceBounds.maxLng - sourceBounds.minLng);
-    const normalizedLat = (lat - sourceBounds.minLat) / (sourceBounds.maxLat - sourceBounds.minLat);
-    
-    // Scale to target range
-    const newLng = targetBounds.minLng + normalizedLng * (targetBounds.maxLng - targetBounds.minLng);
-    const newLat = targetBounds.minLat + normalizedLat * (targetBounds.maxLat - targetBounds.minLat);
-    
-    return [newLng, newLat];
-  };
-  
-  // Handle different geometry types
-  if (geometryType === 'Point') {
-    return transformPoint(coordinates);
-  } else if (geometryType === 'LineString' || geometryType === 'MultiPoint') {
-    return coordinates.map(transformPoint);
-  } else if (geometryType === 'Polygon' || geometryType === 'MultiLineString') {
-    return coordinates.map(ring => ring.map(transformPoint));
-  } else if (geometryType === 'MultiPolygon') {
-    return coordinates.map(polygon => polygon.map(ring => ring.map(transformPoint)));
-  }
-  
-  // For nested arrays, recursively transform
-  return coordinates.map(coord => {
-    if (Array.isArray(coord[0])) {
-      return transformCoordinates(coord, null, sourceBounds, targetBounds);
-    }
-    return transformPoint(coord);
-  });
-}
-
 // Fit map view to GeoJSON data
 function fitMapToData() {
   if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
@@ -445,18 +438,24 @@ function fitMapToData() {
   try {
     const bounds = getBoundingBox(geojsonData);
     
-    map.fitBounds([
-      [bounds.minLng, bounds.minLat],
-      [bounds.maxLng, bounds.maxLat]
-    ], { 
-      padding: 20,
-      maxZoom: 7
-    });
-    
-    console.log("Map fitted to data bounds:", [
-      [bounds.minLng, bounds.minLat],
-      [bounds.maxLng, bounds.maxLat]
-    ]);
+    // Check if bounds are valid
+    if (bounds.minLng < bounds.maxLng && bounds.minLat < bounds.maxLat) {
+      map.fitBounds([
+        [bounds.minLng, bounds.minLat],
+        [bounds.maxLng, bounds.maxLat]
+      ], { 
+        padding: 20,
+        maxZoom: 7
+      });
+      
+      console.log("Map fitted to data bounds:", [
+        [bounds.minLng, bounds.minLat],
+        [bounds.maxLng, bounds.maxLat]
+      ]);
+    } else {
+      console.warn("Invalid bounds calculated, using default Colombia bounds");
+      map.fitBounds([[-79, -4], [-67, 12]], { padding: 20 });
+    }
   } catch (error) {
     console.error("Error fitting map to data:", error);
     // Fallback to Colombia coordinates
@@ -482,15 +481,36 @@ function setupMapInteractions() {
         console.log("Feature ID:", feature.id);
       }
       
-      // Try various property names that might contain municipality code
+      // Try to find a property that might match with the municipality code in CSV
       const properties = feature.properties;
-      const municipalityCode = feature.id || 
-        (properties.DPTO_CCDGO && properties.DPTO_CCDGO.toString()) ||
-        (properties.MPIO_CDPMP && properties.MPIO_CDPMP.toString()) ||
-        (properties.CODIGO_MPI && properties.CODIGO_MPI.toString()) ||
-        (properties.COD_DANE && properties.COD_DANE.toString()) ||
-        (properties.id && properties.id.toString()) ||
-        (properties.dpt && properties.dpt.toString());
+      
+      // Possible property names in the JSON file that might contain municipality codes
+      const possibleCodeProperties = [
+        'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI', 
+        'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt'
+      ];
+      
+      // Try to find a matching property
+      let municipalityCode = feature.id;
+      
+      for (const prop of possibleCodeProperties) {
+        if (properties[prop]) {
+          municipalityCode = properties[prop].toString();
+          break;
+        }
+      }
+      
+      // If we can't find a matching property, try using the name to match
+      if (!municipalityCode && properties.name) {
+        // Find a municipality in our CSV data with matching name
+        for (const [code, yearData] of Object.entries(municipalitiesData)) {
+          if (yearData[currentYear] && 
+              yearData[currentYear].name.toLowerCase() === properties.name.toLowerCase()) {
+            municipalityCode = code;
+            break;
+          }
+        }
+      }
       
       if (hoveredMunicipalityId !== municipalityCode) {
         hoveredMunicipalityId = municipalityCode;
@@ -522,14 +542,30 @@ function setupMapInteractions() {
       const feature = e.features[0];
       const properties = feature.properties;
       
-      // Find municipality code
-      const municipalityCode = feature.id || 
-        (properties.DPTO_CCDGO && properties.DPTO_CCDGO.toString()) ||
-        (properties.MPIO_CDPMP && properties.MPIO_CDPMP.toString()) ||
-        (properties.CODIGO_MPI && properties.CODIGO_MPI.toString()) ||
-        (properties.COD_DANE && properties.COD_DANE.toString()) ||
-        (properties.id && properties.id.toString()) ||
-        (properties.dpt && properties.dpt.toString());
+      // Same logic as hover to find municipality code
+      const possibleCodeProperties = [
+        'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI', 
+        'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt'
+      ];
+      
+      let municipalityCode = feature.id;
+      
+      for (const prop of possibleCodeProperties) {
+        if (properties[prop]) {
+          municipalityCode = properties[prop].toString();
+          break;
+        }
+      }
+      
+      if (!municipalityCode && properties.name) {
+        for (const [code, yearData] of Object.entries(municipalitiesData)) {
+          if (yearData[currentYear] && 
+              yearData[currentYear].name.toLowerCase() === properties.name.toLowerCase()) {
+            municipalityCode = code;
+            break;
+          }
+        }
+      }
       
       // Get vulnerability data
       const vulnerability = computeVulnerabilityIndex(municipalityCode, currentYear);
@@ -569,6 +605,19 @@ function setupMapInteractions() {
         new mapboxgl.Popup()
           .setLngLat(e.lngLat)
           .setHTML(popupContent)
+          .addTo(map);
+      } else {
+        // Show popup with just the feature properties if we don't have vulnerability data
+        const name = properties.name || properties.NAME || properties.NOMBRE || 'Unknown';
+        
+        new mapboxgl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(`
+            <div class="popup-content">
+              <div class="popup-title">${name}</div>
+              <div>No vulnerability data available</div>
+            </div>
+          `)
           .addTo(map);
       }
     }
@@ -621,15 +670,32 @@ function updateMapLayers() {
   
   // Update properties with vulnerability index
   updatedData.features = updatedData.features.map(feature => {
-    // Determine municipality code
+    // Determine municipality code as in hover and click handlers
     const properties = feature.properties;
-    const municipalityCode = feature.id || 
-      (properties.DPTO_CCDGO && properties.DPTO_CCDGO.toString()) ||
-      (properties.MPIO_CDPMP && properties.MPIO_CDPMP.toString()) ||
-      (properties.CODIGO_MPI && properties.CODIGO_MPI.toString()) ||
-      (properties.COD_DANE && properties.COD_DANE.toString()) ||
-      (properties.id && properties.id.toString()) ||
-      (properties.dpt && properties.dpt.toString());
+    
+    const possibleCodeProperties = [
+      'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI', 
+      'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt'
+    ];
+    
+    let municipalityCode = feature.id;
+    
+    for (const prop of possibleCodeProperties) {
+      if (properties[prop]) {
+        municipalityCode = properties[prop].toString();
+        break;
+      }
+    }
+    
+    if (!municipalityCode && properties.name) {
+      for (const [code, yearData] of Object.entries(municipalitiesData)) {
+        if (yearData[currentYear] && 
+            yearData[currentYear].name.toLowerCase() === properties.name.toLowerCase()) {
+          municipalityCode = code;
+          break;
+        }
+      }
+    }
     
     // Calculate vulnerability
     const vulnerability = computeVulnerabilityIndex(municipalityCode, currentYear);
@@ -730,16 +796,33 @@ function updateDengueOverlay() {
   // Clone the GeoJSON data
   const updatedData = JSON.parse(JSON.stringify(geojsonData));
   
-  // Update properties with dengue cases
+  // Update properties with dengue cases using the same municipality code lookup
   updatedData.features = updatedData.features.map(feature => {
     const properties = feature.properties;
-    const municipalityCode = feature.id || 
-      (properties.DPTO_CCDGO && properties.DPTO_CCDGO.toString()) ||
-      (properties.MPIO_CDPMP && properties.MPIO_CDPMP.toString()) ||
-      (properties.CODIGO_MPI && properties.CODIGO_MPI.toString()) ||
-      (properties.COD_DANE && properties.COD_DANE.toString()) ||
-      (properties.id && properties.id.toString()) ||
-      (properties.dpt && properties.dpt.toString());
+    
+    const possibleCodeProperties = [
+      'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI', 
+      'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt'
+    ];
+    
+    let municipalityCode = feature.id;
+    
+    for (const prop of possibleCodeProperties) {
+      if (properties[prop]) {
+        municipalityCode = properties[prop].toString();
+        break;
+      }
+    }
+    
+    if (!municipalityCode && properties.name) {
+      for (const [code, yearData] of Object.entries(municipalitiesData)) {
+        if (yearData[currentYear] && 
+            yearData[currentYear].name.toLowerCase() === properties.name.toLowerCase()) {
+          municipalityCode = code;
+          break;
+        }
+      }
+    }
     
     const data = getMunicipalityData(municipalityCode, currentYear);
     
