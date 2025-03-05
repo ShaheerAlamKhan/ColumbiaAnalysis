@@ -70,30 +70,68 @@
           </div>
         </div>
 
-        <div id="municipality-info" class="control-section">
-          <h3>Municipality Data</h3>
-          <p class="info-message">Hover over a municipality to see details</p>
-          <div id="municipality-details" style="display: none;">
-            <h4 id="municipality-name">-</h4>
-            <p>Population: <span id="municipality-population">-</span></p>
-            <div class="vulnerability-score">
-              <span>Overall Vulnerability:</span>
-              <span id="vulnerability-score">-</span>
-            </div>
-            <div id="component-breakdown">
-              <div class="component">
-                <span>Water Access Vulnerability:</span>
-                <span id="water-score">-</span>
-              </div>
-              <div class="component">
-                <span>Education Vulnerability:</span>
-                <span id="education-score">-</span>
-              </div>
-              <div class="component">
-                <span>Employment Vulnerability:</span>
-                <span id="employment-score">-</span>
-              </div>
-            </div>
+        <div class="control-section">
+          <h3>Writeup</h3>
+          <p> 1. What have you done so far? </p>
+
+          <p>  So far we have refined our project idea, 
+            now focusing on creating a visualization 
+            that highlights the socio-economic vulnerabilities in Colombia.
+            We are planning to create a composite of the education levels, 
+            access to internet and water for 1121 municipalities in Colombia.
+            We are using a mapbox, as well as geojson files for Colombia to 
+            overlay the map and graphically visualize the regions. 
+            We have planned to create a gradient toolbar on the side 
+            that captures the composite of vulnerabilities for the specific 
+            municipalities. The vulnerabilities will be based on aspects included 
+            in the metadata, such as employment, water access, and internet access; 
+            we plan on further developing this during the week. </p>
+            
+            <p> 2. What will be the most challenging of your project to design and why? </p>
+
+            <p>
+              The most challenging part of our project will be ensuring 
+              the municipality is accurate when overlaying the geojson files
+              with the mapbox. Another challenge will be defining an objective 
+              formula for our composite “vulnerability index” of 4 features, 
+              employment, water access, education levels, and internet access. 
+              Filtering the municipalities on the map will also be challenging 
+              because there's a lot of them; we are working with 1121 municipalities 
+              of Columbia which can be overwhelming for the reader to look at in an 
+              interactive visualization. The last big challenge we expect to face 
+              is going to be animating the change in our vulnerability legend as 
+              the user hovers over different municipalities. 
+            </p>
+        </div>
+
+
+            <div id="municipality-info" class="control-section">
+              <h3>Municipality Data</h3>
+              <p class="info-message">Hover over a municipality to see details</p>
+              <div id="municipality-details" style="display: none;">
+                <h4 id="municipality-name">-</h4>
+                <p>Population: <span id="municipality-population">-</span></p>
+                <div class="vulnerability-score">
+                  <span>Overall Vulnerability:</span>
+                  <span id="vulnerability-score">-</span>
+                </div>
+                <div id="component-breakdown">
+                  <div class="component">
+                    <span>Water Access Vulnerability:</span>
+                    <span id="water-score">-</span>
+                  </div>
+                  <div class="component">
+                    <span>Education Vulnerability:</span>
+                    <span id="education-score">-</span>
+                  </div>
+                  <div class="component">
+                    <span>Employment Vulnerability:</span>
+                    <span id="employment-score">-</span>
+                  </div>
+                </div>
+
+
+
           </div>
         </div>
       </div>
