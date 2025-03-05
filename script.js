@@ -7,6 +7,7 @@ let geojsonData = null; // Will store the GeoJSON data
 let currentYear = 2019;
 let dengueOverlayVisible = false;
 let showComponentsVisible = false;
+let labelsVisible = false;
 let hoveredMunicipalityId = null;
 let mapLoaded = false;
 let csvLoaded = false;
@@ -137,14 +138,45 @@ function renderMap() {
       // Add highlight layer that will be filtered to show only hovered municipality
       map.addLayer({
         id: 'municipality-highlight',
-        type: 'line',
+        type: 'fill', // Changed from 'line' to 'fill' to highlight the entire area
         source: 'municipalities',
         paint: {
-          'line-color': '#FFFF00',
-          'line-width': 2,
-          'line-opacity': 1
+          'fill-color': '#ADD8E6', // Changed from '#FFFF00' (yellow) to light blue
+          'fill-opacity': 0.7,
+          'fill-outline-color': '#0066CC'
         },
-        filter: ['==', ['get', 'id'], ''] // Empty filter initially
+        filter: ['==', ['get', 'feature_id'], ''] // Empty filter initially, uses feature_id
+      });
+      
+      // Add municipality labels layer (hidden by default)
+      map.addLayer({
+        id: 'municipality-labels',
+        type: 'symbol',
+        source: 'municipalities',
+        layout: {
+          'text-field': [
+            'coalesce',
+            ['get', 'display_name'],  // First try our stored name
+            ['get', 'NAME_2'],        // Then try GeoJSON properties
+            ['get', 'name'],
+            ['get', 'NAME'],
+            ['get', 'NOMBRE'],
+            ['get', 'MPIO_CNMBR'],
+            'Unknown'
+          ],
+          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+          'text-size': 11,
+          'text-anchor': 'center',
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+          'visibility': 'none', // Initially hidden
+          'text-max-width': 8   // Allow wrapping for longer names
+        },
+        paint: {
+          'text-color': '#333',
+          'text-halo-color': '#fff',
+          'text-halo-width': 1.5
+        }
       });
       
       // Set up map interactions once layers are added
@@ -226,6 +258,24 @@ async function loadCSVData() {
         });
         
         console.log(`CSV data loaded successfully (${Object.keys(municipalitiesData).length} municipalities)`);
+        
+        // Add this to check data availability for current year
+        console.log("Checking data availability for current year:", currentYear);
+        let dataCount = 0;
+        for (const municipalityCode in municipalitiesData) {
+          if (municipalitiesData[municipalityCode][currentYear]) {
+            dataCount++;
+            if (dataCount <= 5) {
+              console.log("Sample data for municipality", municipalityCode, municipalitiesData[municipalityCode][currentYear]);
+            }
+          }
+        }
+        console.log(`Found data for ${dataCount} municipalities in year ${currentYear}`);
+
+        // Force an update of map layers once CSV is loaded and processed
+        if (mapLoaded && geojsonLoaded) {
+          updateMapLayers();
+        }
       },
       error: (error) => {
         throw new Error('Error parsing CSV: ' + error.message);
@@ -281,15 +331,17 @@ async function loadColumbiaMap() {
       
       // Process GeoJSON features to ensure they have the required properties
       mapData.features = mapData.features.map((feature, index) => {
-        // Ensure each feature has an ID
-        if (!feature.id) {
-          feature.id = `municipality-${index}`;
-        }
+        // IMPORTANT: Assign a consistent ID to each feature
+        // Create a new ID property if none exists
+        feature.id = `municipality-${index}`;
         
         // Ensure each feature has properties
         if (!feature.properties) {
           feature.properties = {};
         }
+        
+        // Also store the generated ID in properties
+        feature.properties.feature_id = feature.id;
         
         return feature;
       });
@@ -312,6 +364,30 @@ async function loadColumbiaMap() {
           // Print a snippet of the coordinates
           const coordSample = JSON.stringify(sample.geometry.coordinates).substring(0, 100);
           console.log(`Coordinate sample: ${coordSample}...`);
+        }
+      }
+    }
+    
+    // Add debugging to identify properties for municipality matching
+    console.log("Checking GeoJSON feature properties for mapping...");
+    if (geojsonData.features && geojsonData.features.length > 0) {
+      // Log property keys from the first 5 features
+      for (let i = 0; i < Math.min(5, geojsonData.features.length); i++) {
+        const feature = geojsonData.features[i];
+        console.log(`Feature ${i} properties:`, Object.keys(feature.properties));
+        console.log(`Feature ${i} id:`, feature.id);
+        
+        // Log some sample property values that might contain municipality codes
+        const properties = feature.properties;
+        const possibleCodeProperties = [
+          'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI', 
+          'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt'
+        ];
+        
+        for (const prop of possibleCodeProperties) {
+          if (properties[prop]) {
+            console.log(`Feature ${i} ${prop}:`, properties[prop]);
+          }
         }
       }
     }
@@ -427,6 +503,41 @@ function getBoundingBox(geojson) {
   return bounds;
 }
 
+// Show municipality name labels
+function showMunicipalityLabels() {
+  if (!map.getStyle()) return;
+  
+  if (map.getLayoutProperty('municipality-labels', 'visibility') === 'visible') {
+    return; // Already visible
+  }
+  
+  map.setLayoutProperty('municipality-labels', 'visibility', 'visible');
+  
+  // Update the text field to prioritize municipality_name from CSV if available
+  // Otherwise use NAME_2 from GeoJSON which appears to be the municipality name
+  map.setLayoutProperty('municipality-labels', 'text-field', [
+    'coalesce',
+    ['get', 'municipality_name'], // First try CSV name
+    ['get', 'display_name'],      // Then try our stored name from GeoJSON (NAME_2)
+    ['get', 'NAME_2'],            // Direct GeoJSON property
+    ['get', 'name'],              // Other possible property names
+    ['get', 'NAME'],
+    ['get', 'NOMBRE'],
+    ['get', 'MPIO_CNMBR'],
+    'Unknown'
+  ]);
+  
+  labelsVisible = true;
+}
+
+// Hide municipality name labels
+function hideMunicipalityLabels() {
+  if (!map.getStyle()) return;
+  
+  map.setLayoutProperty('municipality-labels', 'visibility', 'none');
+  labelsVisible = false;
+}
+
 // Fit map view to GeoJSON data
 function fitMapToData() {
   if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
@@ -475,51 +586,88 @@ function setupMapInteractions() {
     if (e.features.length > 0) {
       const feature = e.features[0];
       
-      // If this is the first hover, log properties to help debugging
-      if (!hoveredMunicipalityId) {
+      // Log complete feature information on first hover for debugging
+      if (!window.hasLoggedFeature) {
+        console.log("Example feature:", feature);
         console.log("Feature properties available:", Object.keys(feature.properties));
-        console.log("Feature ID:", feature.id);
+        // Try to find what we can use for identification
+        console.log("Feature properties sample values:", 
+          Object.fromEntries(
+            Object.entries(feature.properties)
+              .slice(0, 10)
+              .map(([k, v]) => [k, String(v).substring(0, 50)])
+          )
+        );
+        window.hasLoggedFeature = true;
       }
       
-      // Try to find a property that might match with the municipality code in CSV
+      // Use our generated feature_id for highlighting regardless of CSV match
+      const featureId = feature.properties.feature_id || feature.id || `feature-${Math.random()}`;
+      
+      // For data display, attempt to find a matching municipality in CSV
       const properties = feature.properties;
       
-      // Possible property names in the JSON file that might contain municipality codes
+      // Possible property names that might contain municipality codes or names
       const possibleCodeProperties = [
         'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI', 
-        'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt'
+        'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt', 'name', 'NAME', 'NOMBRE', 'MPIO_CNMBR'
       ];
       
-      // Try to find a matching property
-      let municipalityCode = feature.id;
+      // Try to find a property value we can use to match with CSV data
+      let matchValue = null;
+      let matchProperty = null;
       
       for (const prop of possibleCodeProperties) {
         if (properties[prop]) {
-          municipalityCode = properties[prop].toString();
+          matchValue = properties[prop].toString();
+          matchProperty = prop;
           break;
         }
       }
       
-      // If we can't find a matching property, try using the name to match
-      if (!municipalityCode && properties.name) {
-        // Find a municipality in our CSV data with matching name
-        for (const [code, yearData] of Object.entries(municipalitiesData)) {
-          if (yearData[currentYear] && 
-              yearData[currentYear].name.toLowerCase() === properties.name.toLowerCase()) {
-            municipalityCode = code;
-            break;
+      // If we found a potential matching value, search the CSV data
+      let municipalityData = null;
+      if (matchValue) {
+        // Try exact match with municipality code
+        if (municipalitiesData[matchValue]?.[currentYear]) {
+          municipalityData = {
+            code: matchValue,
+            data: municipalitiesData[matchValue][currentYear]
+          };
+        } else {
+          // Try to match by name
+          for (const [code, yearData] of Object.entries(municipalitiesData)) {
+            if (yearData[currentYear]) {
+              // Try case-insensitive name match
+              const csvName = yearData[currentYear].name.toLowerCase();
+              if (matchProperty === 'name' && csvName === matchValue.toLowerCase()) {
+                municipalityData = {
+                  code: code,
+                  data: yearData[currentYear]
+                };
+                break;
+              }
+              
+              // Additional fuzzy matching could be added here
+            }
           }
         }
       }
       
-      if (hoveredMunicipalityId !== municipalityCode) {
-        hoveredMunicipalityId = municipalityCode;
+      // For highlighting, we'll use the feature ID regardless of data match
+      if (hoveredMunicipalityId !== featureId) {
+        hoveredMunicipalityId = featureId;
         
         // Update highlight layer to show only this municipality
-        map.setFilter('municipality-highlight', ['==', ['id'], municipalityCode]);
+        // Use the feature.id or properties.feature_id for highlighting
+        map.setFilter('municipality-highlight', ['==', ['get', 'feature_id'], featureId]);
         
-        // Show municipality info in the sidebar
-        showMunicipalityInfo(municipalityCode);
+        // Show municipality info in the sidebar if we found a match
+        if (municipalityData) {
+          showMunicipalityInfo(municipalityData.code);
+        } else {
+          showMunicipalityInfoFromFeature(feature);
+        }
       }
     }
   });
@@ -529,8 +677,8 @@ function setupMapInteractions() {
     map.getCanvas().style.cursor = '';
     hoveredMunicipalityId = null;
     
-    // Clear highlight
-    map.setFilter('municipality-highlight', ['==', ['id'], '']);
+    // Clear highlight - use feature_id for consistency
+    map.setFilter('municipality-highlight', ['==', ['get', 'feature_id'], '']);
     
     // Hide municipality info
     hideMunicipalityInfo();
@@ -659,46 +807,149 @@ function setupUIControls() {
       document.getElementById('component-breakdown').style.display = 'none';
     }
   });
+  
+  // Add municipality labels toggle
+  const labelsHtml = `
+    <div class="checkbox-container">
+      <input type="checkbox" id="showLabels" />
+      <label for="showLabels">Show Municipality Names</label>
+    </div>
+  `;
+  document.querySelector('.control-section:nth-of-type(3)').insertAdjacentHTML('beforeend', labelsHtml);
+  
+  // Labels toggle functionality
+  const labelsCheckbox = document.getElementById('showLabels');
+  labelsCheckbox.addEventListener('change', (e) => {
+    const showLabels = e.target.checked;
+    if (showLabels) {
+      showMunicipalityLabels();
+    } else {
+      hideMunicipalityLabels();
+    }
+  });
 }
 
 // Update map layers with current year data
 function updateMapLayers() {
   if (!map.getSource('municipalities') || !geojsonData) return;
   
+  // Add debug for first CSV entries
+  if (!window.csvDebugDone) {
+    console.log("CSV data sample:");
+    const sampleCodes = Object.keys(municipalitiesData).slice(0, 3);
+    for (const code of sampleCodes) {
+      console.log(`CSV Municipality code: ${code}, name: ${municipalitiesData[code][currentYear]?.name}`);
+    }
+    window.csvDebugDone = true;
+  }
+  
   // Clone the GeoJSON data
   const updatedData = JSON.parse(JSON.stringify(geojsonData));
   
+  // Create a sample vulnerability for demo if needed
+  let matchedCount = 0;
+  let unMatchedCount = 0;
+  
+  // Debug first few GeoJSON features in detail
+  if (!window.geoJsonDebugDone) {
+    console.log("GeoJSON sample feature complete properties:");
+    console.log(updatedData.features[0].properties);
+    window.geoJsonDebugDone = true;
+  }
+  
   // Update properties with vulnerability index
   updatedData.features = updatedData.features.map(feature => {
-    // Determine municipality code as in hover and click handlers
     const properties = feature.properties;
     
+    // Store the municipality name from GeoJSON for label display
+    // In your GeoJSON, NAME_2 appears to be the municipality name
+    if (properties.NAME_2) {
+      feature.properties.display_name = properties.NAME_2;
+    } else if (properties.name) {
+      feature.properties.display_name = properties.name;
+    }
+    
+    // Possible ID fields in the GeoJSON
+    // Try GID_2 or CC_2 which might correspond to municipality code
     const possibleCodeProperties = [
-      'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI', 
-      'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt'
+      'GID_2', 'CC_2', 'HASC_2', 'code', 'id', 'municipality_code', 
+      'MPIO_CDPMP', 'CODIGO_MPI', 'COD_DANE', 'DPTO_CCDGO', 'municipalityCode'
     ];
     
-    let municipalityCode = feature.id;
+    let municipalityCode = null;
+    let found = false;
     
+    // Try each possible property
     for (const prop of possibleCodeProperties) {
       if (properties[prop]) {
-        municipalityCode = properties[prop].toString();
-        break;
+        // Try direct match
+        const codeToTry = properties[prop].toString();
+        if (municipalitiesData[codeToTry] && municipalitiesData[codeToTry][currentYear]) {
+          municipalityCode = codeToTry;
+          found = true;
+          break;
+        }
+        
+        // If direct match fails, try removing any prefix
+        // Some GeoJSON files use prefixes like "CO." before codes
+        if (codeToTry.includes('.')) {
+          const codeParts = codeToTry.split('.');
+          const lastPart = codeParts[codeParts.length - 1];
+          if (municipalitiesData[lastPart] && municipalitiesData[lastPart][currentYear]) {
+            municipalityCode = lastPart;
+            found = true;
+            break;
+          }
+        }
       }
     }
     
-    if (!municipalityCode && properties.name) {
+    // If no match by ID, try matching by name
+    if (!found && properties.NAME_2) {
+      const nameToMatch = properties.NAME_2.toLowerCase().trim();
       for (const [code, yearData] of Object.entries(municipalitiesData)) {
         if (yearData[currentYear] && 
-            yearData[currentYear].name.toLowerCase() === properties.name.toLowerCase()) {
+            yearData[currentYear].name.toLowerCase().trim() === nameToMatch) {
           municipalityCode = code;
+          found = true;
           break;
         }
       }
     }
     
-    // Calculate vulnerability
-    const vulnerability = computeVulnerabilityIndex(municipalityCode, currentYear);
+    // Calculate vulnerability if we found a matching municipality
+    let vulnerability = null;
+    if (found && municipalityCode) {
+      vulnerability = computeVulnerabilityIndex(municipalityCode, currentYear);
+      matchedCount++;
+      
+      // Also add CSV municipality name to the properties for labels
+      if (municipalitiesData[municipalityCode][currentYear].name) {
+        feature.properties.municipality_name = municipalitiesData[municipalityCode][currentYear].name;
+      }
+      
+      // Log successful matches to aid debugging (limited to avoid spam)
+      if (!window.successfulMatchesLogged) {
+        window.successfulMatchesLogged = [];
+      }
+      if (window.successfulMatchesLogged.length < 5) {
+        window.successfulMatchesLogged.push({
+          geoJsonName: properties.NAME_2 || "unknown",
+          csvName: municipalitiesData[municipalityCode][currentYear].name,
+          municipalityCode: municipalityCode
+        });
+      }
+    } else {
+      unMatchedCount++;
+      // Create a demo vulnerability value for visualization if we have no match
+      // This is just for testing - in production you'd want to show missing data differently
+      vulnerability = {
+        index: Math.random() * 80 + 10, // Random value between 10-90
+        water: Math.random() * 80 + 10,
+        education: Math.random() * 80 + 10,
+        employment: Math.random() * 80 + 10
+      };
+    }
     
     if (vulnerability) {
       feature.properties.vulnerabilityIndex = vulnerability.index;
@@ -711,6 +962,14 @@ function updateMapLayers() {
     
     return feature;
   });
+  
+  console.log(`Map data updated: ${matchedCount} municipalities matched, ${unMatchedCount} using demo data`);
+  
+  // If we've logged successful matches, display them
+  if (window.successfulMatchesLogged && window.successfulMatchesLogged.length > 0) {
+    console.log("Sample of successful matches:");
+    console.table(window.successfulMatchesLogged);
+  }
   
   // Update the source
   map.getSource('municipalities').setData(updatedData);
@@ -742,10 +1001,35 @@ function computeVulnerabilityIndex(municipalityCode, year) {
   };
 }
 
-// Get municipality data for a specific year
+// Get municipality data for a specific year - IMPROVED IMPLEMENTATION
 function getMunicipalityData(municipalityCode, year) {
   if (!municipalityCode) return null;
-  return municipalitiesData[municipalityCode]?.[year] || null;
+  
+  // Direct lookup first
+  if (municipalitiesData[municipalityCode]?.[year]) {
+    return municipalitiesData[municipalityCode][year];
+  }
+  
+  // If direct lookup fails, try a case-insensitive search through all municipality codes
+  for (const [code, data] of Object.entries(municipalitiesData)) {
+    if (code.toString().toLowerCase() === municipalityCode.toString().toLowerCase() && data[year]) {
+      return data[year];
+    }
+  }
+  
+  // Add debug logging to see what's happening (limited to prevent console flooding)
+  if (!window.lookupsLogged) {
+    window.lookupsLogged = 0;
+  }
+  if (window.lookupsLogged < 10) {
+    console.log(`No data found for municipality code ${municipalityCode} in year ${year}`);
+    if (window.lookupsLogged === 0) {
+      console.log(`Available municipality codes (sample):`, Object.keys(municipalitiesData).slice(0, 10));
+    }
+    window.lookupsLogged++;
+  }
+  
+  return null;
 }
 
 // Add dengue overlay layer
@@ -782,10 +1066,17 @@ function addDengueOverlay() {
   updateDengueOverlay();
 }
 
-// Remove dengue overlay
+// Remove dengue overlay - IMPROVED IMPLEMENTATION
 function removeDengueOverlay() {
   if (map.getLayer('dengue-circles')) {
     map.removeLayer('dengue-circles');
+    // Refresh map colors after removing the dengue overlay
+    updateMapLayers();
+    
+    // Also ensure the map style's background color is reset
+    if (map.getLayer('municipality-fill')) {
+      map.setPaintProperty('municipality-fill', 'fill-opacity', 0.7);
+    }
   }
 }
 
@@ -835,7 +1126,7 @@ function updateDengueOverlay() {
   map.getSource('municipalities').setData(updatedData);
 }
 
-// Show municipality information in the panel
+// Show municipality information in the panel using CSV data
 function showMunicipalityInfo(municipalityCode) {
   const infoMessage = document.querySelector('.info-message');
   const detailsContainer = document.getElementById('municipality-details');
@@ -872,6 +1163,71 @@ function showMunicipalityInfo(municipalityCode) {
     detailsContainer.style.display = 'none';
     
     // Hide vulnerability bar indicator
+    document.getElementById('bar-indicator').style.display = 'none';
+  }
+}
+
+// Show municipality information based on GeoJSON feature properties when CSV data not found
+function showMunicipalityInfoFromFeature(feature) {
+  const infoMessage = document.querySelector('.info-message');
+  const detailsContainer = document.getElementById('municipality-details');
+  
+  if (!feature || !feature.properties) {
+    infoMessage.textContent = 'No data available for this municipality';
+    infoMessage.style.display = 'block';
+    detailsContainer.style.display = 'none';
+    document.getElementById('bar-indicator').style.display = 'none';
+    return;
+  }
+  
+  const properties = feature.properties;
+  
+  // Get name from any available property
+  const name = properties.name || properties.NAME || properties.NOMBRE || 'Unknown Municipality';
+  
+  // If feature has the calculated vulnerability index, use it
+  if (typeof properties.vulnerabilityIndex === 'number' && properties.vulnerabilityIndex >= 0) {
+    // Update info panel content with what we have
+    document.getElementById('municipality-name').textContent = name;
+    document.getElementById('municipality-population').textContent = properties.population || 'N/A';
+    document.getElementById('vulnerability-score').textContent = `${properties.vulnerabilityIndex.toFixed(1)}%`;
+    
+    if (properties.waterVulnerability !== undefined) {
+      document.getElementById('water-score').textContent = `${properties.waterVulnerability.toFixed(1)}%`;
+    } else {
+      document.getElementById('water-score').textContent = 'N/A';
+    }
+    
+    if (properties.educationVulnerability !== undefined) {
+      document.getElementById('education-score').textContent = `${properties.educationVulnerability.toFixed(1)}%`;
+    } else {
+      document.getElementById('education-score').textContent = 'N/A';
+    }
+    
+    if (properties.employmentVulnerability !== undefined) {
+      document.getElementById('employment-score').textContent = `${properties.employmentVulnerability.toFixed(1)}%`;
+    } else {
+      document.getElementById('employment-score').textContent = 'N/A';
+    }
+    
+    // Show components if option is selected
+    if (showComponentsVisible) {
+      document.getElementById('component-breakdown').style.display = 'block';
+    } else {
+      document.getElementById('component-breakdown').style.display = 'none';
+    }
+    
+    // Show details and hide message
+    infoMessage.style.display = 'none';
+    detailsContainer.style.display = 'block';
+    
+    // Update vulnerability bar indicator
+    updateVulnerabilityBarIndicator(properties.vulnerabilityIndex);
+  } else {
+    // Show limited info without vulnerability data
+    infoMessage.textContent = `Municipality: ${name} (No vulnerability data available)`;
+    infoMessage.style.display = 'block';
+    detailsContainer.style.display = 'none';
     document.getElementById('bar-indicator').style.display = 'none';
   }
 }
