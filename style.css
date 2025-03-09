@@ -40,17 +40,20 @@
   
   /* Map container */
   #map {
-    position: static;
+    position: fixed;
     flex: 1;
-    height: 100%;
+    height: 80%;
+    width:72.5%;
   }
+
+
   
   /* UI container and panels */
   #ui-container {
     position: fixed;
     top: 60px;
     right: 0;
-    width: 350px;
+    width: 400px;
     height: 100%;
     background-color: white;
     overflow-y: auto;
