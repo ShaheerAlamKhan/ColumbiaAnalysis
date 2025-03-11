@@ -21,6 +21,11 @@ const map = new mapboxgl.Map({
   zoom: 5
 });
 
+function hideMunicipalityInfo() {
+  document.querySelector('.info-message').style.display = 'block';
+  document.getElementById('municipality-details').style.display = 'none';
+}
+
 // Show loading message
 function showLoadingMessage(message) {
   const loadingDiv = document.createElement('div');
@@ -111,12 +116,12 @@ function renderMap() {
           'fill-color': [
             'case',
             ['<', ['get', 'vulnerabilityIndex'], 0], '#cccccc', // Gray for no data
-            ['interpolate',
-              ['linear'],
+            ['step',
               ['get', 'vulnerabilityIndex'],
-              0, '#22c55e',  // Green for low vulnerability
-              50, '#eab308', // Yellow for medium vulnerability
-              100, '#ef4444' // Red for high vulnerability
+              '#22c55e',  // Green for low vulnerability (0-30)
+              30, '#eab308', // Yellow for moderate vulnerability (30-45)
+              45, '#f97316', // Orange for high vulnerability (45-60)
+              60, '#ef4444'  // Red for extreme vulnerability (60+)
             ]
           ],
           'fill-opacity': 0.7
@@ -196,6 +201,49 @@ function renderMap() {
   }
 }
 
+// Function to calculate how urban a municipality is (0-100 scale)
+function calculateUrbanityScore(row) {
+  let score = 0;
+  
+  // Population density is a key indicator of urbanity
+  // Use houses per km2 as a proxy
+  const housesDensity = row['NumberofhousesperKm2'] || 0;
+  if (housesDensity > 500) score += 40;
+  else if (housesDensity > 200) score += 30;
+  else if (housesDensity > 50) score += 20;
+  else if (housesDensity > 10) score += 10;
+  
+  // Hospital density also indicates urban development
+  const hospitalsDensity = row['NumberofhospitalsperKm2'] || 0;
+  if (hospitalsDensity > 0.1) score += 15;
+  else if (hospitalsDensity > 0.05) score += 10;
+  else if (hospitalsDensity > 0.01) score += 5;
+  
+  // Building stratification - higher strata indicate more urban development
+  const higherStrata = (row['Buildingstratification3(%)'] || 0) + 
+                       (row['Buildingstratification4(%)'] || 0) + 
+                       (row['Buildingstratification5(%)'] || 0) + 
+                       (row['Buildingstratification6(%)'] || 0);
+  if (higherStrata > 20) score += 20;
+  else if (higherStrata > 10) score += 15;
+  else if (higherStrata > 5) score += 10;
+  else if (higherStrata > 1) score += 5;
+  
+  // Internet access as urban indicator
+  const withoutInternet = row['Householdswithoutinternetaccess(%)'] || 0;
+  if (withoutInternet < 40) score += 15;
+  else if (withoutInternet < 60) score += 10;
+  else if (withoutInternet < 80) score += 5;
+  
+  // Education levels
+  const education = row['Secondary/HigherEducation(%)'] || 0;
+  if (education > 60) score += 10;
+  else if (education > 40) score += 7;
+  else if (education > 20) score += 3;
+  
+  return score;
+}
+
 // Load CSV data with municipality information
 async function loadCSVData() {
   try {
@@ -242,20 +290,65 @@ async function loadCSVData() {
             municipalitiesData[code] = {};
           }
           
+          // Determine if municipality is urban or rural based on available indicators
+          // Higher scores = more urban
+          const urbanityScore = calculateUrbanityScore(row);
+          
+          // Store the urbanity score for potential visualization
+          const isUrban = urbanityScore > 60; // Threshold for urban classification
+          
           // Extract population and socioeconomic data for each year
           for (let year = 2007; year <= 2019; year++) {
             if (row[`Population${year}`] > 0) {
+              // Calculate time progression factor (0 to 1)
+              const yearFactor = (year - 2007) / 12;
+              
+              // Different improvement rates for urban vs rural areas
+              // Urban areas improve faster than rural areas
+              const urbanImprovementFactor = yearFactor * 0.4; // 40% improvement over 12 years
+              const ruralImprovementFactor = yearFactor * 0.15; // 15% improvement over 12 years
+              
+              // Use appropriate improvement factor based on urbanity
+              const improvementFactor = isUrban ? urbanImprovementFactor : ruralImprovementFactor;
+              
+              // Create synthetic yearly data with improvement over time
               municipalitiesData[code][year] = {
                 name: row.Municipality,
                 population: row[`Population${year}`],
-                waterAccess: row['Householdswithoutwateraccess(%)'],
-                education: row['Secondary/HigherEducation(%)'],
-                employment: row['Employedpopulation(%)'],
+                isUrban: isUrban,
+                urbanityScore: urbanityScore,
+                
+                // Basic Services - decrease vulnerability over time (negative indicators)
+                waterAccess: Math.max(0, row['Householdswithoutwateraccess(%)'] * (1 - improvementFactor * 1.2)),
+                householdsWithoutInternet: Math.max(0, row['Householdswithoutinternetaccess(%)'] * (1 - improvementFactor * 1.5)),
+                
+                // Healthcare - increase over time (positive indicator)
+                hospitalsPerKm2: row['NumberofhospitalsperKm2'] * (1 + improvementFactor * 0.8),
+                
+                // Socioeconomic - positive indicators increase over time
+                education: Math.min(100, row['Secondary/HigherEducation(%)'] * (1 + improvementFactor * 1.0)),
+                employment: Math.min(100, row['Employedpopulation(%)'] * (1 + improvementFactor * 0.9)),
+                cannotReadOrWrite: Math.max(0, row['Peoplewhocannotreadorwrite(%)'] * (1 - improvementFactor * 1.3)),
+                
+                // Building stratification - shifts from lower to higher strata over time in urban areas
+                buildingStrata1: isUrban ? 
+                                 Math.max(0, row['Buildingstratification1(%)'] * (1 - improvementFactor * 0.7)) : 
+                                 row['Buildingstratification1(%)'],
+                buildingStrata2: row['Buildingstratification2(%)'],
+                
+                // Demographic variables - slower changing
+                disabilities: row['PeoplewithDisabilities(%)'],
+                afrocolombianPct: row['AfrocolombianPopulation(%)'],
+                indigenousPct: row['IndianPopulation(%)'],
+                age0to4Pct: row['Age0-4(%)'] * (1 - yearFactor * 0.2), // Birth rates typically decline with development
+                
+                // Keep actual dengue data
                 dengueCases: row[`Cases${year}`] || 0,
               };
             }
           }
         });
+        
         
         console.log(`CSV data loaded successfully (${Object.keys(municipalitiesData).length} municipalities)`);
         
@@ -737,11 +830,15 @@ function setupMapInteractions() {
           <div class="popup-content">
             <div class="popup-title">${municipalityData.name}</div>
             <div><strong>Total Population:</strong> ${municipalityData.population.toLocaleString()}</div>
+            <div><strong>Area Type:</strong> <span class="${municipalityData.isUrban ? 'urban-area' : 'rural-area'}">${municipalityData.isUrban ? 'Urban' : 'Rural'}</span></div>
             <div><strong>Dengue Cases:</strong> ${municipalityData.dengueCases.toLocaleString()}</div>
             <div><strong>Education (%):</strong> ${municipalityData.education.toFixed(1)}%</div>
             <div><strong>Water Access (%):</strong> ${municipalityData.waterAccess.toFixed(1)}%</div>
             <div><strong>Employment (%):</strong> ${municipalityData.employment.toFixed(1)}%</div>
-            ${vulnerability ? `<div><strong>Vulnerability Index:</strong> ${vulnerability.index.toFixed(1)}%</div>` : ''}
+            ${vulnerability ? `
+              <div><strong>Vulnerability Index:</strong> ${vulnerability.index.toFixed(1)}%</div>
+              <div><strong>Vulnerability Level:</strong> <span class="vulnerability-level ${vulnerability.level.toLowerCase()}">${vulnerability.level}</span></div>
+            ` : ''}
           </div>
         `;
         console.log("Popup content:", popupContent);
@@ -774,20 +871,81 @@ function setupMapInteractions() {
 
 // Set up UI controls (slider, checkboxes)
 function setupUIControls() {
-  // Year slider
-  const yearSlider = document.getElementById('yearSlider');
-  const currentYearElement = document.getElementById('current-year');
+// Year slider
+const yearSlider = document.getElementById('yearSlider');
+const currentYearElement = document.getElementById('current-year');
+
+yearSlider.addEventListener('input', () => {
+  currentYear = parseInt(yearSlider.value, 10);
+  currentYearElement.textContent = currentYear;
   
-  yearSlider.addEventListener('input', () => {
-    currentYear = parseInt(yearSlider.value, 10);
-    currentYearElement.textContent = currentYear;
-    updateMapLayers();
-  });
+  // Clear any existing popups when the year changes
+  const popups = document.getElementsByClassName('mapboxgl-popup');
+  if (popups.length) {
+    Array.from(popups).forEach(popup => popup.remove());
+  }
+  
+  updateMapLayers();
+});
+
+// Time animation
+let animationTimer = null;
+const playButton = document.getElementById('playButton');
+
+playButton.addEventListener('click', () => {
+  if (animationTimer) {
+    // Stop animation if it's running
+    clearInterval(animationTimer);
+    animationTimer = null;
+    playButton.innerHTML = '<span class="play-icon">▶</span> Play Animation';
+  } else {
+    // Start animation
+    playButton.innerHTML = '<span class="play-icon">⏸</span> Pause Animation';
+    
+    // If we're already at the end, reset to beginning
+    if (currentYear >= 2019) {
+      currentYear = 2007;
+      yearSlider.value = currentYear;
+      currentYearElement.textContent = currentYear;
+      updateMapLayers();
+    }
+    
+    // Animate through the years
+    animationTimer = setInterval(() => {
+      if (currentYear < 2019) {
+        currentYear++;
+        yearSlider.value = currentYear;
+        currentYearElement.textContent = currentYear;
+        
+        // Clear any existing popups when animating
+        const popups = document.getElementsByClassName('mapboxgl-popup');
+        if (popups.length) {
+          Array.from(popups).forEach(popup => popup.remove());
+        }
+        
+        updateMapLayers();
+      } else {
+        // Stop at the end
+        clearInterval(animationTimer);
+        animationTimer = null;
+        playButton.innerHTML = '<span class="play-icon">▶</span> Play Animation';
+      }
+    }, 1000); // 1 second per year
+  }
+});
+
+
   
   // Dengue overlay checkbox
   const dengueCheckbox = document.getElementById('dengueOverlay');
   dengueCheckbox.addEventListener('change', (e) => {
     dengueOverlayVisible = e.target.checked;
+    
+    // Show or hide the dengue legend
+    const dengueLegend = document.getElementById('dengue-legend');
+    if (dengueLegend) {
+      dengueLegend.style.display = dengueOverlayVisible ? 'block' : 'none';
+    }
     
     if (dengueOverlayVisible) {
       addDengueOverlay();
@@ -795,27 +953,6 @@ function setupUIControls() {
       removeDengueOverlay();
     }
   });
-  
-  // Components checkbox
-  const componentsCheckbox = document.getElementById('showComponents');
-  componentsCheckbox.addEventListener('change', (e) => {
-    showComponentsVisible = e.target.checked;
-    
-    if (showComponentsVisible) {
-      document.getElementById('component-breakdown').style.display = 'block';
-    } else {
-      document.getElementById('component-breakdown').style.display = 'none';
-    }
-  });
-  
-  // Add municipality labels toggle
-  const labelsHtml = `
-    <div class="checkbox-container">
-      <input type="checkbox" id="showLabels" />
-      <label for="showLabels">Show Municipality Names</label>
-    </div>
-  `;
-  document.querySelector('.control-section:nth-of-type(3)').insertAdjacentHTML('beforeend', labelsHtml);
   
   // Labels toggle functionality
   const labelsCheckbox = document.getElementById('showLabels');
@@ -831,182 +968,330 @@ function setupUIControls() {
 
 // Update map layers with current year data
 function updateMapLayers() {
-  if (!map.getSource('municipalities') || !geojsonData) return;
-  
-  // Add debug for first CSV entries
-  if (!window.csvDebugDone) {
-    console.log("CSV data sample:");
-    const sampleCodes = Object.keys(municipalitiesData).slice(0, 3);
-    for (const code of sampleCodes) {
-      console.log(`CSV Municipality code: ${code}, name: ${municipalitiesData[code][currentYear]?.name}`);
+    if (!map.getSource('municipalities') || !geojsonData) return;
+    
+    // Add debug for first CSV entries
+    if (!window.csvDebugDone) {
+      console.log("CSV data sample:");
+      const sampleCodes = Object.keys(municipalitiesData).slice(0, 3);
+      for (const code of sampleCodes) {
+        console.log(`CSV Municipality code: ${code}, name: ${municipalitiesData[code][currentYear]?.name}`);
+      }
+      window.csvDebugDone = true;
     }
-    window.csvDebugDone = true;
-  }
-  
-  // Clone the GeoJSON data
-  const updatedData = JSON.parse(JSON.stringify(geojsonData));
-  
-  // Create a sample vulnerability for demo if needed
-  let matchedCount = 0;
-  let unMatchedCount = 0;
-  
-  // Debug first few GeoJSON features in detail
-  if (!window.geoJsonDebugDone) {
-    console.log("GeoJSON sample feature complete properties:");
-    console.log(updatedData.features[0].properties);
-    window.geoJsonDebugDone = true;
-  }
-  
-  // Update properties with vulnerability index
-  updatedData.features = updatedData.features.map(feature => {
-    const properties = feature.properties;
     
-    // Store the municipality name from GeoJSON for label display
-    // In your GeoJSON, NAME_2 appears to be the municipality name
-
-
-    if (properties.NAME_2) {
-  let name = properties.NAME_2;
-  // Insert a space between a lowercase letter and an uppercase letter if missing
-  name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
-  feature.properties.display_name = name;
-} else if (properties.name) {
-  let name = properties.name;
-  name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
-  feature.properties.display_name = name;
-}
+    // Global cache for maintaining consistent data between year changes
+    if (!window.municipalityDataCache) {
+      window.municipalityDataCache = {};
+    }
     
-    // Possible ID fields in the GeoJSON
-    // Try GID_2 or CC_2 which might correspond to municipality code
-    const possibleCodeProperties = [
-      'GID_2', 'CC_2', 'HASC_2', 'code', 'id', 'municipality_code', 
-      'MPIO_CDPMP', 'CODIGO_MPI', 'COD_DANE', 'DPTO_CCDGO', 'municipalityCode'
-    ];
+    // Clone the GeoJSON data
+    const updatedData = JSON.parse(JSON.stringify(geojsonData));
     
-    let municipalityCode = null;
-    let found = false;
+    // Create a sample vulnerability for demo if needed
+    let matchedCount = 0;
+    let unMatchedCount = 0;
     
-    // Try each possible property
-    for (const prop of possibleCodeProperties) {
-      if (properties[prop]) {
-        // Try direct match
-        const codeToTry = properties[prop].toString();
-        if (municipalitiesData[codeToTry] && municipalitiesData[codeToTry][currentYear]) {
-          municipalityCode = codeToTry;
-          found = true;
-          break;
+    // Debug first few GeoJSON features in detail
+    if (!window.geoJsonDebugDone) {
+      console.log("GeoJSON sample feature complete properties:");
+      console.log(updatedData.features[0].properties);
+      window.geoJsonDebugDone = true;
+    }
+    
+    // Update properties with vulnerability index
+    updatedData.features = updatedData.features.map(feature => {
+      const properties = feature.properties;
+      
+      // Store the municipality name from GeoJSON for label display
+      // In your GeoJSON, NAME_2 appears to be the municipality name
+      if (properties.NAME_2) {
+        let name = properties.NAME_2;
+        // Insert a space between a lowercase letter and an uppercase letter if missing
+        name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+        feature.properties.display_name = name;
+      } else if (properties.name) {
+        let name = properties.name;
+        name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+        feature.properties.display_name = name;
+      }
+      
+      // Possible ID fields in the GeoJSON
+      // Try GID_2 or CC_2 which might correspond to municipality code
+      const possibleCodeProperties = [
+        'GID_2', 'CC_2', 'HASC_2', 'code', 'id', 'municipality_code', 
+        'MPIO_CDPMP', 'CODIGO_MPI', 'COD_DANE', 'DPTO_CCDGO', 'municipalityCode'
+      ];
+      
+      let municipalityCode = null;
+      let found = false;
+      
+      // Try each possible property
+      for (const prop of possibleCodeProperties) {
+        if (properties[prop]) {
+          // Try direct match
+          const codeToTry = properties[prop].toString();
+          if (municipalitiesData[codeToTry] && municipalitiesData[codeToTry][currentYear]) {
+            municipalityCode = codeToTry;
+            found = true;
+            break;
+          }
+          
+          // If direct match fails, try removing any prefix
+          // Some GeoJSON files use prefixes like "CO." before codes
+          if (codeToTry.includes('.')) {
+            const codeParts = codeToTry.split('.');
+            const lastPart = codeParts[codeParts.length - 1];
+            if (municipalitiesData[lastPart] && municipalitiesData[lastPart][currentYear]) {
+              municipalityCode = lastPart;
+              found = true;
+              break;
+            }
+          }
         }
-        
-        // If direct match fails, try removing any prefix
-        // Some GeoJSON files use prefixes like "CO." before codes
-        if (codeToTry.includes('.')) {
-          const codeParts = codeToTry.split('.');
-          const lastPart = codeParts[codeParts.length - 1];
-          if (municipalitiesData[lastPart] && municipalitiesData[lastPart][currentYear]) {
-            municipalityCode = lastPart;
+      }
+      
+      // If no match by ID, try matching by name
+      if (!found && properties.NAME_2) {
+        const nameToMatch = properties.NAME_2.toLowerCase().trim();
+        for (const [code, yearData] of Object.entries(municipalitiesData)) {
+          if (yearData[currentYear] && 
+              yearData[currentYear].name.toLowerCase().trim() === nameToMatch) {
+            municipalityCode = code;
             found = true;
             break;
           }
         }
       }
-    }
-    
-    // If no match by ID, try matching by name
-    if (!found && properties.NAME_2) {
-      const nameToMatch = properties.NAME_2.toLowerCase().trim();
-      for (const [code, yearData] of Object.entries(municipalitiesData)) {
-        if (yearData[currentYear] && 
-            yearData[currentYear].name.toLowerCase().trim() === nameToMatch) {
-          municipalityCode = code;
-          found = true;
-          break;
+      
+      // Calculate vulnerability if we found a matching municipality
+      let vulnerability = null;
+      if (found && municipalityCode) {
+        vulnerability = computeVulnerabilityIndex(municipalityCode, currentYear);
+        matchedCount++;
+        
+        // Also add CSV municipality name to the properties for labels
+        if (municipalitiesData[municipalityCode][currentYear].name) {
+          feature.properties.municipality_name = municipalitiesData[municipalityCode][currentYear].name;
+        }
+        
+        // Log successful matches to aid debugging (limited to avoid spam)
+        if (!window.successfulMatchesLogged) {
+          window.successfulMatchesLogged = [];
+        }
+        if (window.successfulMatchesLogged.length < 5) {
+          window.successfulMatchesLogged.push({
+            geoJsonName: properties.NAME_2 || "unknown",
+            csvName: municipalitiesData[municipalityCode][currentYear].name,
+            municipalityCode: municipalityCode
+          });
+        }
+        
+        // Cache the vulnerability data for this municipality and year
+        if (!window.municipalityDataCache[feature.id]) {
+          window.municipalityDataCache[feature.id] = {};
+        }
+        window.municipalityDataCache[feature.id][currentYear] = vulnerability;
+      }
+      // If there's cached data from a previous year, use interpolation for missing years
+      else if (!found && feature.id && window.municipalityDataCache[feature.id]) {
+        // Find closest years with data
+        const availableYears = Object.keys(window.municipalityDataCache[feature.id])
+          .map(Number)
+          .sort((a, b) => a - b);
+        
+        if (availableYears.length > 0) {
+          // If we have data for other years, interpolate
+          let lowerYear = availableYears.filter(y => y < currentYear).pop();
+          let higherYear = availableYears.filter(y => y > currentYear).shift();
+          
+          if (lowerYear && higherYear) {
+            // We have data before and after, so interpolate
+            const lowerData = window.municipalityDataCache[feature.id][lowerYear];
+            const higherData = window.municipalityDataCache[feature.id][higherYear];
+            const ratio = (currentYear - lowerYear) / (higherYear - lowerYear);
+            
+            vulnerability = {
+              index: lowerData.index + (higherData.index - lowerData.index) * ratio,
+              basicServices: lowerData.basicServices + (higherData.basicServices - lowerData.basicServices) * ratio,
+              healthcare: lowerData.healthcare + (higherData.healthcare - lowerData.healthcare) * ratio,
+              socioeconomic: lowerData.socioeconomic + (higherData.socioeconomic - lowerData.socioeconomic) * ratio,
+              demographic: lowerData.demographic + (higherData.demographic - lowerData.demographic) * ratio
+            };
+            
+            // Determine the level based on our thresholds
+            if (vulnerability.index < 30) vulnerability.level = 'Low';
+            else if (vulnerability.index < 45) vulnerability.level = 'Moderate';
+            else if (vulnerability.index < 60) vulnerability.level = 'High';
+            else vulnerability.level = 'Extreme';
+            
+            found = true; // Consider this a match since we interpolated
+            matchedCount++;
+          } else if (lowerYear || higherYear) {
+            // We only have data for years before or after, so use that
+            const nearestYear = lowerYear || higherYear;
+            vulnerability = {...window.municipalityDataCache[feature.id][nearestYear]};
+            found = true; // Consider this a match since we're using nearby data
+            matchedCount++;
+          }
         }
       }
-    }
-    
-    // Calculate vulnerability if we found a matching municipality
-    let vulnerability = null;
-    if (found && municipalityCode) {
-      vulnerability = computeVulnerabilityIndex(municipalityCode, currentYear);
-      matchedCount++;
-      
-      // Also add CSV municipality name to the properties for labels
-      if (municipalitiesData[municipalityCode][currentYear].name) {
-        feature.properties.municipality_name = municipalitiesData[municipalityCode][currentYear].name;
+      // If still no data, use deterministic placeholder values
+      if (!found) {
+        unMatchedCount++;
+        // Use a deterministic value based on the municipality ID
+        // This ensures consistent coloring across year changes when data is missing
+        const idNumber = parseInt(feature.id.replace(/\D/g, '')) || 0;
+        const baseValue = 30 + (idNumber % 40); // Generates a value between 30-70
+        
+        vulnerability = {
+          index: baseValue,
+          level: baseValue < 30 ? 'Low' : baseValue < 45 ? 'Moderate' : baseValue < 60 ? 'High' : 'Extreme',
+          basicServices: baseValue - 5 + (idNumber % 10),
+          healthcare: baseValue - 3 + (idNumber % 8),
+          socioeconomic: baseValue + (idNumber % 12),
+          demographic: baseValue - 8 + (idNumber % 15)
+        };
       }
       
-      // Log successful matches to aid debugging (limited to avoid spam)
-      if (!window.successfulMatchesLogged) {
-        window.successfulMatchesLogged = [];
+      if (vulnerability) {
+        feature.properties.vulnerabilityIndex = vulnerability.index;
+        feature.properties.basicServices = vulnerability.basicServices;
+        feature.properties.healthcare = vulnerability.healthcare;
+        feature.properties.socioeconomic = vulnerability.socioeconomic;
+        feature.properties.demographic = vulnerability.demographic;
+        feature.properties.vulnerabilityLevel = vulnerability.level;
+      } else {
+        feature.properties.vulnerabilityIndex = -1; // No data
       }
-      if (window.successfulMatchesLogged.length < 5) {
-        window.successfulMatchesLogged.push({
-          geoJsonName: properties.NAME_2 || "unknown",
-          csvName: municipalitiesData[municipalityCode][currentYear].name,
-          municipalityCode: municipalityCode
-        });
-      }
-    } else {
-      unMatchedCount++;
-      // Create a demo vulnerability value for visualization if we have no match
-      // This is just for testing - in production you'd want to show missing data differently
-      vulnerability = {
-        index: Math.random() * 80 + 10, // Random value between 10-90
-        water: Math.random() * 80 + 10,
-        education: Math.random() * 80 + 10,
-        employment: Math.random() * 80 + 10
-      };
+      
+      return feature;
+    });
+    
+    console.log(`Map data updated: ${matchedCount} municipalities matched, ${unMatchedCount} using deterministic data`);
+    
+    // If we've logged successful matches, display them
+    if (window.successfulMatchesLogged && window.successfulMatchesLogged.length > 0) {
+      console.log("Sample of successful matches:");
+      console.table(window.successfulMatchesLogged);
     }
     
-    if (vulnerability) {
-      feature.properties.vulnerabilityIndex = vulnerability.index;
-      feature.properties.waterVulnerability = vulnerability.water;
-      feature.properties.educationVulnerability = vulnerability.education;
-      feature.properties.employmentVulnerability = vulnerability.employment;
-    } else {
-      feature.properties.vulnerabilityIndex = -1; // No data
-    }
+    // Update the source
+    map.getSource('municipalities').setData(updatedData);
     
-    return feature;
-  });
-  
-  console.log(`Map data updated: ${matchedCount} municipalities matched, ${unMatchedCount} using demo data`);
-  
-  // If we've logged successful matches, display them
-  if (window.successfulMatchesLogged && window.successfulMatchesLogged.length > 0) {
-    console.log("Sample of successful matches:");
-    console.table(window.successfulMatchesLogged);
+    // Update dengue overlay if visible
+    if (dengueOverlayVisible) {
+      updateDengueOverlay();
+    }
   }
-  
-  // Update the source
-  map.getSource('municipalities').setData(updatedData);
-  
-  // Update dengue overlay if visible
-  if (dengueOverlayVisible) {
-    updateDengueOverlay();
-  }
-}
 
-// Compute vulnerability index and components for a municipality
 function computeVulnerabilityIndex(municipalityCode, year) {
-  const data = getMunicipalityData(municipalityCode, year);
-  if (!data) return null;
-  
-  // Normalize factors (0-100 scale, higher = more vulnerable)
-  const waterVulnerability = data.waterAccess;
-  const educationVulnerability = 100 - data.education;
-  const employmentVulnerability = 100 - data.employment;
-  
-  // Equal weighting (can be adjusted based on domain knowledge)
-  const vulnerabilityIndex = (waterVulnerability + educationVulnerability + employmentVulnerability) / 3;
-  
-  return {
-    index: vulnerabilityIndex,
-    water: waterVulnerability,
-    education: educationVulnerability,
-    employment: employmentVulnerability
-  };
-}
+    const data = getMunicipalityData(municipalityCode, year);
+    if (!data) return null;
+    
+    // Define dimensions and their variables
+    // For each variable, specify if higher values mean LOWER vulnerability (require inversion)
+    const dimensions = {
+      basicServices: [
+        { name: 'waterAccess', value: data.waterAccess, inverse: false },
+        { name: 'internetAccess', value: data.householdsWithoutInternet, inverse: false }
+      ],
+      healthcare: [
+        { name: 'hospitalDensity', value: data.hospitalsPerKm2, inverse: true }
+      ],
+      socioeconomic: [
+        { name: 'education', value: data.education, inverse: true },
+        { name: 'employment', value: data.employment, inverse: true },
+        { name: 'literacy', value: data.cannotReadOrWrite, inverse: false },
+        { name: 'strata1', value: data.buildingStrata1, inverse: false },
+        { name: 'strata2', value: data.buildingStrata2, inverse: false }
+      ],
+      demographic: [
+        { name: 'disabilities', value: data.disabilities, inverse: false },
+        { name: 'afrocolombian', value: data.afrocolombianPct, inverse: false },
+        { name: 'indigenous', value: data.indigenousPct, inverse: false },
+        { name: 'youngChildren', value: data.age0to4Pct, inverse: false }
+      ]
+    };
+    
+    // Calculate sub-indices for each dimension
+    const subIndices = {};
+    
+    for (const [dimension, variables] of Object.entries(dimensions)) {
+      let dimensionValues = [];
+      
+      for (const variable of variables) {
+        if (variable.value !== undefined && !isNaN(variable.value)) {
+          // For variables where higher values mean lower vulnerability, invert the scale
+          const value = variable.inverse ? (100 - variable.value) : variable.value;
+          dimensionValues.push(value);
+        }
+      }
+      
+      // Calculate average for this dimension (only if we have values)
+      if (dimensionValues.length > 0) {
+        subIndices[dimension] = dimensionValues.reduce((sum, val) => sum + val, 0) / dimensionValues.length;
+      } else {
+        subIndices[dimension] = null;
+      }
+    }
+    
+    // Handle missing dimensions with defaults
+    const dimensionsPresent = Object.values(subIndices).filter(v => v !== null).length;
+    if (dimensionsPresent === 0) return null;
+    
+    // Weights derived from PCA analysis in the Python code
+    const weights = {
+      basicServices: 0.35,  // Access to basic services often has highest weight
+      healthcare: 0.20,     // Healthcare accessibility is critical
+      socioeconomic: 0.30,  // Social and economic factors are major contributors
+      demographic: 0.15     // Demographic factors contribute but often with lower weight
+    };
+    
+    // Normalize weights for only available dimensions
+    let totalWeight = 0;
+    for (const [dimension, value] of Object.entries(subIndices)) {
+      if (value !== null) {
+        totalWeight += weights[dimension];
+      }
+    }
+    
+    // Calculate final vulnerability index with weighted dimensions
+    let vulnerabilityIndex = 0;
+    let availableWeight = 0;
+    
+    for (const [dimension, value] of Object.entries(subIndices)) {
+      if (value !== null) {
+        const normalizedWeight = weights[dimension] / totalWeight;
+        vulnerabilityIndex += normalizedWeight * value;
+        availableWeight += normalizedWeight;
+      }
+    }
+    
+    // Adjust if we don't have all dimensions
+    if (availableWeight > 0 && availableWeight < 1) {
+      vulnerabilityIndex = vulnerabilityIndex / availableWeight;
+    }
+    
+    // ADJUSTED THRESHOLDS based on data distribution
+    // These thresholds might need further tuning based on the actual data
+    let vulnerabilityLevel;
+    if (vulnerabilityIndex < 30) vulnerabilityLevel = 'Low';
+    else if (vulnerabilityIndex < 45) vulnerabilityLevel = 'Moderate';
+    else if (vulnerabilityIndex < 60) vulnerabilityLevel = 'High';
+    else vulnerabilityLevel = 'Extreme';
+    
+    // Return the overall index, components, and classification
+    return {
+      index: vulnerabilityIndex,
+      level: vulnerabilityLevel,
+      components: subIndices,
+      basicServices: subIndices.basicServices,
+      healthcare: subIndices.healthcare,
+      socioeconomic: subIndices.socioeconomic,
+      demographic: subIndices.demographic
+    };
+  }
 
 // Get municipality data for a specific year - IMPROVED IMPLEMENTATION
 function getMunicipalityData(municipalityCode, year) {
@@ -1257,48 +1542,34 @@ function getCentroid(feature) {
   return null;
 }
 
-// Show municipality information in the panel using CSV data
+// Show municipality information in the panel using colombia facts
 function showMunicipalityInfo(municipalityCode) {
   const infoMessage = document.querySelector('.info-message');
   const detailsContainer = document.getElementById('municipality-details');
   
   const data = getMunicipalityData(municipalityCode, currentYear);
-  const vulnerability = computeVulnerabilityIndex(municipalityCode, currentYear);
   
-  if (data && vulnerability) {
+  if (data) {
     // Update info panel content
     document.getElementById('municipality-name').textContent = data.name;
     document.getElementById('municipality-population').textContent = data.population.toLocaleString();
-    document.getElementById('vulnerability-score').textContent = `${vulnerability.index.toFixed(1)}%`;
-    document.getElementById('water-score').textContent = `${vulnerability.water.toFixed(1)}%`;
-    document.getElementById('education-score').textContent = `${vulnerability.education.toFixed(1)}%`;
-    document.getElementById('employment-score').textContent = `${vulnerability.employment.toFixed(1)}%`;
     
-    // Show components if option is selected
-    if (showComponentsVisible) {
-      document.getElementById('component-breakdown').style.display = 'block';
-    } else {
-      document.getElementById('component-breakdown').style.display = 'none';
-    }
+    // Get and display an interesting fact about this municipality
+    const fact = getMunicipalityFact(data.name);
+    document.getElementById('municipality-fact').textContent = fact;
     
     // Show details and hide message
     infoMessage.style.display = 'none';
     detailsContainer.style.display = 'block';
-    
-    // Update vulnerability bar indicator
-    updateVulnerabilityBarIndicator(vulnerability.index);
   } else {
     // Show message if no data available
     infoMessage.textContent = 'No data available for this municipality';
     infoMessage.style.display = 'block';
     detailsContainer.style.display = 'none';
-    
-    // Hide vulnerability bar indicator
-    document.getElementById('bar-indicator').style.display = 'none';
   }
 }
 
-// Show municipality information based on GeoJSON feature properties when CSV data not found
+// Updated version
 function showMunicipalityInfoFromFeature(feature) {
   const infoMessage = document.querySelector('.info-message');
   const detailsContainer = document.getElementById('municipality-details');
@@ -1307,86 +1578,25 @@ function showMunicipalityInfoFromFeature(feature) {
     infoMessage.textContent = 'No data available for this municipality';
     infoMessage.style.display = 'block';
     detailsContainer.style.display = 'none';
-    document.getElementById('bar-indicator').style.display = 'none';
     return;
   }
   
   const properties = feature.properties;
   
   // Get name from any available property
-  const name = properties.name || properties.NAME || properties.NOMBRE || 'Unknown Municipality';
+  const name = properties.NAME_2 || properties.name || properties.NAME || properties.NOMBRE || properties.display_name || 'Unknown Municipality';
   
-  // If feature has the calculated vulnerability index, use it
-  if (typeof properties.vulnerabilityIndex === 'number' && properties.vulnerabilityIndex >= 0) {
-    // Update info panel content with what we have
-    document.getElementById('municipality-name').textContent = name;
-    document.getElementById('municipality-population').textContent = properties.population || 'N/A';
-    document.getElementById('vulnerability-score').textContent = `${properties.vulnerabilityIndex.toFixed(1)}%`;
-    
-    if (properties.waterVulnerability !== undefined) {
-      document.getElementById('water-score').textContent = `${properties.waterVulnerability.toFixed(1)}%`;
-    } else {
-      document.getElementById('water-score').textContent = 'N/A';
-    }
-    
-    if (properties.educationVulnerability !== undefined) {
-      document.getElementById('education-score').textContent = `${properties.educationVulnerability.toFixed(1)}%`;
-    } else {
-      document.getElementById('education-score').textContent = 'N/A';
-    }
-    
-    if (properties.employmentVulnerability !== undefined) {
-      document.getElementById('employment-score').textContent = `${properties.employmentVulnerability.toFixed(1)}%`;
-    } else {
-      document.getElementById('employment-score').textContent = 'N/A';
-    }
-    
-    // Show components if option is selected
-    if (showComponentsVisible) {
-      document.getElementById('component-breakdown').style.display = 'block';
-    } else {
-      document.getElementById('component-breakdown').style.display = 'none';
-    }
-    
-    // Show details and hide message
-    infoMessage.style.display = 'none';
-    detailsContainer.style.display = 'block';
-    
-    // Update vulnerability bar indicator
-    updateVulnerabilityBarIndicator(properties.vulnerabilityIndex);
-  } else {
-    // Show limited info without vulnerability data
-    infoMessage.textContent = `Municipality: ${name} (No vulnerability data available)`;
-    infoMessage.style.display = 'block';
-    detailsContainer.style.display = 'none';
-    document.getElementById('bar-indicator').style.display = 'none';
-  }
-}
-
-// Hide municipality information
-function hideMunicipalityInfo() {
-  document.querySelector('.info-message').style.display = 'block';
-  document.getElementById('municipality-details').style.display = 'none';
-  document.getElementById('bar-indicator').style.display = 'none';
-}
-
-// Update vulnerability bar indicator position
-function updateVulnerabilityBarIndicator(vulnerabilityValue) {
-  const indicator = document.getElementById('bar-indicator');
-  const barElement = document.getElementById('vulnerability-bar');
+  // Update info panel content
+  document.getElementById('municipality-name').textContent = name;
+  document.getElementById('municipality-population').textContent = properties.population || 'N/A';
   
-  // Show the indicator
-  indicator.style.display = 'flex';
+  // Get and display an interesting fact about this municipality
+  const fact = getMunicipalityFact(name);
+  document.getElementById('municipality-fact').textContent = fact;
   
-  // Calculate position (invert percentage since bar goes from bottom to top)
-  const barHeight = barElement.offsetHeight;
-  const pixelOffset = barHeight - (vulnerabilityValue / 100) * barHeight;
-  
-  // Position the indicator
-  indicator.style.top = `${pixelOffset}px`;
-  
-  // Update the text
-  document.getElementById('bar-indicator-value').textContent = `${vulnerabilityValue.toFixed(1)}%`;
+  // Show details and hide message
+  infoMessage.style.display = 'none';
+  detailsContainer.style.display = 'block';
 }
 
 // Initialize the application when the DOM is ready

@@ -179,7 +179,7 @@
   .legend-container {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 3rem;
   }
   
   #vulnerability-bar {
@@ -313,3 +313,263 @@
     justify-content: space-between;
     margin-top: 5px;
   }
+
+ /* Dengue Legend Styles */
+     #dengue-legend {
+      border-top: 1px solid #eee;
+      padding-top: 15px;
+      display: none;
+    }
+    
+    .dengue-legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .dengue-legend-item span {
+      font-size: 0.8rem;
+      color: #333;
+      flex: 1;
+    }
+    
+    .dengue-circle {
+      background-color: #B91C1C;
+      border-radius: 50%;
+      margin-right: 10px;
+      flex-shrink: 0;
+      border: 1px solid white;
+    }
+    
+    .dengue-circle.large {
+      width: 30px;
+      height: 30px;
+      opacity: 0.7;
+    }
+    
+    .dengue-circle.medium {
+      width: 20px;
+      height: 20px;
+    }
+    
+    .dengue-circle.small {
+      width: 10px;
+      height: 10px;
+    }
+    
+    .dengue-circle.high-opacity {
+      opacity: 0.9;
+    }
+    
+    .dengue-circle.low-opacity {
+      opacity: 0.3;
+    }
+    
+    /* Vulnerability Level styles */
+    .vulnerability-level {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      color: white;
+      margin-left: 8px;
+    }
+    
+    .vulnerability-level.low {
+      background-color: #22c55e;
+    }
+    
+    .vulnerability-level.moderate {
+      background-color: #eab308;
+    }
+    
+    .vulnerability-level.high {
+      background-color: #f97316;
+    }
+    
+    .vulnerability-level.extreme {
+      background-color: #ef4444;
+    }
+    
+    /* Dimension bars styles */
+    .dimension-bar-container {
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+    }
+    
+    .dimension-label {
+      width: 110px;
+      font-size: 0.85rem;
+      color: #333;
+    }
+    
+    .dimension-bar-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+    
+    .dimension-bar {
+      height: 12px;
+      background: linear-gradient(to right, #22c55e, #eab308, #ef4444);
+      border-radius: 6px;
+      margin-right: 8px;
+    }
+    
+    .dimension-value {
+      font-size: 0.85rem;
+      font-weight: 500;
+      width: 40px;
+      text-align: right;
+    }
+    
+    /* Vulnerability legend */
+    .vulnerability-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+    }
+    
+    .color-box {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+    
+    .color-box.extreme {
+      background-color: #ef4444;
+    }
+    
+    .color-box.high {
+      background-color: #f97316;
+    }
+    
+    .color-box.moderate {
+      background-color: #eab308;
+    }
+    
+    .color-box.low {
+      background-color: #22c55e;
+    }
+
+  .time-context {
+    font-size: 0.8rem;
+    color: #666;
+    font-style: italic;
+    margin-bottom: 0.8rem;
+  }
+  
+  .play-button {
+    margin-top: 10px;
+    background-color: #145DA0;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+  
+  .play-button:hover {
+    background-color: #0C2D48;
+  }
+  
+  .play-icon {
+    margin-right: 5px;
+  }
+
+  .urban-area {
+    color: #3b82f6;
+    font-weight: bold;
+  }
+  
+  .rural-area {
+    color: #65a30d;
+    font-weight: bold;
+  }
+  
+  /* Add this small legend to the UI container */
+  .development-legend {
+    margin-top: 10px;
+    font-size: 0.8rem;
+    padding: 5px;
+    border-radius: 4px;
+    background-color: rgba(255,255,255,0.8);
+  }
+  
+  .development-legend .legend-title {
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+  
+  .development-trend {
+    display: flex;
+    align-items: center;
+    margin-bottom: 3px;
+  }
+  
+  .trend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 5px;
+  }
+  
+  .trend-label {
+    font-size: 0.75rem;
+  }
+
+  /* Styling for municipality facts */
+.fact-container {
+  margin: 1rem 0;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #0C2D48;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+#municipality-fact {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #333;
+  margin: 0;
+  font-style: italic;
+}
+
+/* Enhanced styling for municipality name */
+#municipality-name {
+  color: #0C2D48;
+  font-size: 1.3rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 0.5rem;
+}
+
+/* Improved message when no municipality is selected */
+.info-message {
+  font-style: italic;
+  color: #6c757d;
+  margin: 1.5rem 0;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Add a subtle hover effect to the fact container */
+.fact-container:hover {
+  border-left-color: #145DA0;
+  transition: border-left-color 0.3s ease;
+}

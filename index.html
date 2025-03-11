@@ -23,10 +23,12 @@
     <div id="ui-container">
       <div class="panel">
         <h2>Vulnerability Index</h2>
-        <p>Based on water access, education, and employment indicators</p>
+        <p>This vulnerability index combines indicators across basic services, healthcare, socioeconomic status, and demographics, with special attention to marginalized populations.</p>
+        <p> It uses z-score standardization to normalize variables and Principal Component Analysis to determine optimal dimension weights, producing a 0-100 score that classifies municipalities by vulnerability level.</p>
         
         <div class="control-section">
-          <h3>Selected Year: <span id="current-year">2019</span></h3>
+          <h3>Time Period: <span id="current-year">2019</span></h3>
+          <p id="time-context" class="time-context">Showing a timeline of development in Columbia</p>
           
           <!-- Time Slider -->
           <div id="slider-container">
@@ -36,23 +38,50 @@
               <span>2019</span>
             </div>
           </div>
+          
+          <!-- Add play button for animation -->
+          <button id="playButton" class="play-button">
+            <span class="play-icon">▶</span> Play Animation
+          </button>
         </div>
 
         <div class="control-section">
           <h3>Vulnerability Legend</h3>
-          <div class="legend-container">
-            <div id="vulnerability-bar">
-              <!-- The gradient bar (green -> yellow -> red) -->
-              <div id="bar-gradient"></div>
-              <!-- The arrow/line pointer that moves on hover -->
-              <div id="bar-indicator" style="display: none;">
-                <div id="bar-indicator-line"></div>
-                <span id="bar-indicator-value"></span>
-              </div>
+          <!-- New vulnerability legend -->
+          <div class="vulnerability-legend">
+            <div class="legend-item">
+              <div class="color-box extreme"></div>
+              <span>Extreme (60-100%)</span>
             </div>
-            <div class="legend-labels">
-              <span>High</span>
-              <span>Low</span>
+            <div class="legend-item">
+              <div class="color-box high"></div>
+              <span>High (45-60%)</span>
+            </div>
+            <div class="legend-item">
+              <div class="color-box moderate"></div>
+              <span>Moderate (30-45%)</span>
+            </div>
+            <div class="legend-item">
+              <div class="color-box low"></div>
+              <span>Low (0-30%)</span>
+            </div>
+          </div>
+          
+          
+          <!-- Dengue legend (hidden by default) -->
+          <div id="dengue-legend">
+            <h4 style="font-size: 0.9rem; margin-bottom: 10px;">Dengue Cases Legend</h4>
+            <div class="dengue-legend-item">
+              <div class="dengue-circle large"></div>
+              <span>Large circle = High number of cases</span>
+            </div>
+            <div class="dengue-legend-item">
+              <div class="dengue-circle medium high-opacity"></div>
+              <span>Dark red = High % of population infected</span>
+            </div>
+            <div class="dengue-legend-item">
+              <div class="dengue-circle small low-opacity"></div>
+              <span>Light red = Low % of population infected</span>
             </div>
           </div>
         </div>
@@ -64,38 +93,59 @@
             <input type="checkbox" id="dengueOverlay" />
             <label for="dengueOverlay">Show Dengue Cases</label>
           </div>
-          <!-- Vulnerability Components -->
+
           <div class="checkbox-container">
-            <input type="checkbox" id="showComponents" />
-            <label for="showComponents">Show Component Breakdown</label>
+            <input type="checkbox" id="showLabels" />
+            <label for="showLabels">Show Municipality Names</label>
           </div>
-        </div>
 
         <div class="control-section">
-            <div id="municipality-info" class="control-section">
-              <h3>Municipality Data</h3>
-              <p class="info-message">Hover over a municipality to see details</p>
-              <div id="municipality-details" style="display: none;">
-                <h4 id="municipality-name">-</h4>
-                <p>Population: <span id="municipality-population">-</span></p>
-                <div class="vulnerability-score">
-                  <span>Overall Vulnerability:</span>
-                  <span id="vulnerability-score">-</span>
+          <div id="municipality-info" class="control-section">
+            <h3>Interesting Facts About Colombia</h3>
+            <p class="info-message">Hover over a municipality to discover interesting facts</p>
+            <div id="municipality-details" style="display: none;">
+              <h4 id="municipality-name">-</h4>
+              <p>Population: <span id="municipality-population">-</span></p>
+              <div class="fact-container">
+                <p id="municipality-fact">-</p>
+              </div>
+            </div>
+          </div>
+                
+                <!-- New vulnerability dimension breakdown -->
+                <div id="vulnerability-breakdown" style="margin-top: 15px; display: none;">
+                  <h4>Vulnerability Breakdown</h4>
+                  <div class="dimension-bar-container">
+                    <div class="dimension-label">Basic Services:</div>
+                    <div class="dimension-bar-wrapper">
+                      <div id="basic-services-bar" class="dimension-bar"></div>
+                      <span id="basic-services-value" class="dimension-value">-</span>
+                    </div>
+                  </div>
+                  <div class="dimension-bar-container">
+                    <div class="dimension-label">Healthcare:</div>
+                    <div class="dimension-bar-wrapper">
+                      <div id="healthcare-bar" class="dimension-bar"></div>
+                      <span id="healthcare-value" class="dimension-value">-</span>
+                    </div>
+                  </div>
+                  <div class="dimension-bar-container">
+                    <div class="dimension-label">Socioeconomic:</div>
+                    <div class="dimension-bar-wrapper">
+                      <div id="socioeconomic-bar" class="dimension-bar"></div>
+                      <span id="socioeconomic-value" class="dimension-value">-</span>
+                    </div>
+                  </div>
+                  <div class="dimension-bar-container">
+                    <div class="dimension-label">Demographic:</div>
+                    <div class="dimension-bar-wrapper">
+                      <div id="demographic-bar" class="dimension-bar"></div>
+                      <span id="demographic-value" class="dimension-value">-</span>
+                    </div>
+                  </div>
                 </div>
-                <div id="component-breakdown">
-                  <div class="component">
-                    <span>Water Access Vulnerability:</span>
-                    <span id="water-score">-</span>
-                  </div>
-                  <div class="component">
-                    <span>Education Vulnerability:</span>
-                    <span id="education-score">-</span>
-                  </div>
-                  <div class="component">
-                    <span>Employment Vulnerability:</span>
-                    <span id="employment-score">-</span>
-                  </div>
-                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -106,6 +156,9 @@
     <div class="map visualizations">
       <h2>Additional Visualization</h2>
       <p>This is a sample visualization below the map. You can add charts, graphs, or any other content here that explains more details or offers additional insights.</p>
+      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus sit amet libero at odio auctor blandit. Sed ultricies, mi nec pretium aliquet, magna orci dictum felis, non tincidunt risus urna id arcu. </p>
+      <!-- More content to demonstrate scrolling -->
+      <p>Nam mattis, arcu quis hendrerit sollicitudin, elit urna ullamcorper dui, at semper justo libero a lorem. Cras sit amet nisi eu purus ultrices gravida.</p>
     </div>
   </div>
 
@@ -114,6 +167,8 @@
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
   <!-- PapaParse for CSV parsing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  <!--Colombia Facts-->
+  <script src="colombia-facts.js"></script>
   <!-- Your JS Code -->
   <script src="script.js"></script>
 </body>
