@@ -686,90 +686,90 @@ function setupMapInteractions() {
   
   // Handle click to show popup
   map.on('click', 'municipality-fill', (e) => {
+    console.log("Click event triggered, features:", e.features);
     if (e.features.length > 0) {
       const feature = e.features[0];
       const properties = feature.properties;
-      
-      // Same logic as hover to find municipality code
+      console.log("Feature properties:", properties);
+  
+      // Try to determine municipality code from GeoJSON properties
+      let municipalityCode = null;
       const possibleCodeProperties = [
-        'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI', 
+        'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI',
         'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt'
       ];
-      
-      let municipalityCode = feature.id;
-      
+  
       for (const prop of possibleCodeProperties) {
         if (properties[prop]) {
-          municipalityCode = properties[prop].toString();
+          municipalityCode = properties[prop].toString().trim();
+          console.log(`Found municipality code using property "${prop}": ${municipalityCode}`);
           break;
         }
       }
-      
-      if (!municipalityCode && properties.name) {
+  
+      // If no code was found, try matching by name using display_name or NAME_2
+      if (!municipalityCode) {
+        const featureName = (properties.display_name || properties.NAME_2 || properties.name || "").trim().toLowerCase();
+        console.log("No municipality code found. Attempting name match with:", featureName);
         for (const [code, yearData] of Object.entries(municipalitiesData)) {
-          if (yearData[currentYear] && 
-              yearData[currentYear].name.toLowerCase() === properties.name.toLowerCase()) {
+          if (yearData[currentYear] &&
+              yearData[currentYear].name.toLowerCase().trim() === featureName) {
             municipalityCode = code;
+            console.log(`Matched municipality name to code: ${municipalityCode}`);
             break;
           }
         }
       }
-      
-      // Get vulnerability data
-      const vulnerability = computeVulnerabilityIndex(municipalityCode, currentYear);
+  
+      console.log("Final municipality code:", municipalityCode);
+  
+      // Retrieve CSV data using our lookup function
       const municipalityData = getMunicipalityData(municipalityCode, currentYear);
-      
-      if (vulnerability && municipalityData) {
-        // Create popup content
+      console.log("Retrieved municipality data:", municipalityData);
+  
+      if (municipalityData) {
+        // Optionally, compute the vulnerability index
+        const vulnerability = computeVulnerabilityIndex(municipalityCode, currentYear);
+        console.log("Computed vulnerability:", vulnerability);
+  
+        // Create popup content with CSV data
         const popupContent = `
           <div class="popup-content">
             <div class="popup-title">${municipalityData.name}</div>
-            <div>Population: ${municipalityData.population.toLocaleString()}</div>
-            <div>Vulnerability Index: ${vulnerability.index.toFixed(1)}%</div>
-            ${showComponentsVisible ? `
-              <div class="popup-component">
-                <span>Water Access:</span>
-                <span>${vulnerability.water.toFixed(1)}%</span>
-              </div>
-              <div class="popup-component">
-                <span>Education:</span>
-                <span>${vulnerability.education.toFixed(1)}%</span>
-              </div>
-              <div class="popup-component">
-                <span>Employment:</span>
-                <span>${vulnerability.employment.toFixed(1)}%</span>
-              </div>
-            ` : ''}
-            ${dengueOverlayVisible ? `
-              <div class="popup-component">
-                <span>Dengue Cases:</span>
-                <span>${municipalityData.dengueCases.toLocaleString()}</span>
-              </div>
-            ` : ''}
+            <div><strong>Total Population:</strong> ${municipalityData.population.toLocaleString()}</div>
+            <div><strong>Dengue Cases:</strong> ${municipalityData.dengueCases.toLocaleString()}</div>
+            <div><strong>Education (%):</strong> ${municipalityData.education.toFixed(1)}%</div>
+            <div><strong>Water Access (%):</strong> ${municipalityData.waterAccess.toFixed(1)}%</div>
+            <div><strong>Employment (%):</strong> ${municipalityData.employment.toFixed(1)}%</div>
+            ${vulnerability ? `<div><strong>Vulnerability Index:</strong> ${vulnerability.index.toFixed(1)}%</div>` : ''}
           </div>
         `;
-        
-        // Show popup
+        console.log("Popup content:", popupContent);
+  
+        // Show the popup
         new mapboxgl.Popup()
           .setLngLat(e.lngLat)
           .setHTML(popupContent)
           .addTo(map);
       } else {
-        // Show popup with just the feature properties if we don't have vulnerability data
-        const name = properties.name || properties.NAME || properties.NOMBRE || 'Unknown';
-        
+        // No CSV data found, fallback to feature properties
+        const fallbackName = properties.display_name || properties.NAME_2 || properties.name || 'Unknown';
+        console.log("No CSV data found. Falling back to feature properties for municipality:", fallbackName);
         new mapboxgl.Popup()
           .setLngLat(e.lngLat)
           .setHTML(`
             <div class="popup-content">
-              <div class="popup-title">${name}</div>
-              <div>No vulnerability data available</div>
+              <div class="popup-title">${fallbackName}</div>
+              <div>No CSV data available for this municipality</div>
             </div>
           `)
           .addTo(map);
       }
+    } else {
+      console.log("No features found on click.");
     }
   });
+  
 }
 
 // Set up UI controls (slider, checkboxes)
@@ -863,11 +863,18 @@ function updateMapLayers() {
     
     // Store the municipality name from GeoJSON for label display
     // In your GeoJSON, NAME_2 appears to be the municipality name
+
+
     if (properties.NAME_2) {
-      feature.properties.display_name = properties.NAME_2;
-    } else if (properties.name) {
-      feature.properties.display_name = properties.name;
-    }
+  let name = properties.NAME_2;
+  // Insert a space between a lowercase letter and an uppercase letter if missing
+  name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+  feature.properties.display_name = name;
+} else if (properties.name) {
+  let name = properties.name;
+  name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+  feature.properties.display_name = name;
+}
     
     // Possible ID fields in the GeoJSON
     // Try GID_2 or CC_2 which might correspond to municipality code
