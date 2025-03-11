@@ -573,3 +573,42 @@
   border-left-color: #145DA0;
   transition: border-left-color 0.3s ease;
 }
+
+.fact-container.animated {
+  transition: all 0.5s ease-out;
+  transform-origin: left center;
+}
+
+.fact-container.fadeIn {
+  animation: factFadeIn 0.6s ease-out forwards;
+}
+
+@keyframes factFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+#municipality-name.animated {
+  transition: all 0.4s ease-out;
+}
+
+#municipality-name.fadeIn {
+  animation: titleFadeIn 0.5s ease-out forwards;
+}
+
+@keyframes titleFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
