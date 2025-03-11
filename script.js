@@ -1039,21 +1039,41 @@ function getMunicipalityData(municipalityCode, year) {
   return null;
 }
 
-// Add dengue overlay layer
+// Add dengue overlay layer - REVISED IMPLEMENTATION
 function addDengueOverlay() {
+  // First check if we already have a dengue source, if not create it
+  if (!map.getSource('dengue-data')) {
+    map.addSource('dengue-data', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: []
+      }
+    });
+  }
+  
   // Remove existing layer if it exists
   if (map.getLayer('dengue-circles')) {
     map.removeLayer('dengue-circles');
   }
   
-  // Add new layer
+  // Add new layer using separate source
   map.addLayer({
     id: 'dengue-circles',
     type: 'circle',
-    source: 'municipalities',
+    source: 'dengue-data',
     paint: {
-      'circle-color': '#B91C1C',
-      'circle-opacity': 0.7,
+      'circle-color': '#B91C1C', // Red color for dengue
+      'circle-opacity': [
+        'interpolate',
+        ['linear'],
+        ['get', 'caseRate'], // Case rate (cases per 1000 people)
+        0, 0.3,  // Minimum opacity
+        1, 0.4,  // 1 case per 1000 people
+        5, 0.6,  // 5 cases per 1000 people
+        10, 0.8, // 10 cases per 1000 people
+        50, 0.9  // 50+ cases per 1000 people (very high)
+      ],
       'circle-radius': [
         'interpolate',
         ['linear'],
@@ -1073,64 +1093,168 @@ function addDengueOverlay() {
   updateDengueOverlay();
 }
 
-// Remove dengue overlay - IMPROVED IMPLEMENTATION
+// Remove dengue overlay - REVISED IMPLEMENTATION
 function removeDengueOverlay() {
   if (map.getLayer('dengue-circles')) {
     map.removeLayer('dengue-circles');
-    // Refresh map colors after removing the dengue overlay
-    updateMapLayers();
-    
-    // Also ensure the map style's background color is reset
-    if (map.getLayer('municipality-fill')) {
-      map.setPaintProperty('municipality-fill', 'fill-opacity', 0.7);
-    }
   }
 }
 
-// Update dengue overlay with current year data
+// Update dengue overlay with current year data - REVISED IMPLEMENTATION
 function updateDengueOverlay() {
-  if (!map.getSource('municipalities') || !geojsonData) return;
+  if (!map.getSource('dengue-data')) return;
   
-  // Clone the GeoJSON data
-  const updatedData = JSON.parse(JSON.stringify(geojsonData));
+  // Create a new FeatureCollection specifically for dengue data
+  const dengueData = {
+    type: 'FeatureCollection',
+    features: []
+  };
   
-  // Update properties with dengue cases using the same municipality code lookup
-  updatedData.features = updatedData.features.map(feature => {
+  // Process each municipality to extract dengue data with location
+  for (const [code, yearData] of Object.entries(municipalitiesData)) {
+    // Skip if no data for current year
+    if (!yearData[currentYear]) continue;
+    
+    const municipalityData = yearData[currentYear];
+    const dengueCases = municipalityData.dengueCases || 0;
+    
+    // Skip municipalities with zero cases
+    if (dengueCases <= 0) continue;
+    
+    // Find corresponding feature in geojsonData to get coordinates
+    const feature = findFeatureByMunicipalityCode(code);
+    if (!feature) continue;
+    
+    // Get centroid of the municipality polygon
+    const centroid = getCentroid(feature);
+    if (!centroid) continue;
+    
+    // Calculate case rate per 1000 people
+    const population = municipalityData.population || 1;
+    const caseRate = (dengueCases / population) * 1000;
+    
+    // Create a point feature for this municipality's dengue data
+    dengueData.features.push({
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: centroid
+      },
+      properties: {
+        municipalityCode: code,
+        municipalityName: municipalityData.name,
+        dengueCases: dengueCases,
+        population: population,
+        caseRate: caseRate
+      }
+    });
+  }
+  
+  // Update the dengue data source
+  map.getSource('dengue-data').setData(dengueData);
+  
+  // Log how many dengue points we're displaying
+  console.log(`Displaying dengue data for ${dengueData.features.length} municipalities in ${currentYear}`);
+}
+
+// Helper function to find feature by municipality code
+function findFeatureByMunicipalityCode(code) {
+  if (!geojsonData || !geojsonData.features) return null;
+  
+  // Try to find a matching feature by checking various property fields
+  for (const feature of geojsonData.features) {
     const properties = feature.properties;
     
+    // Check possible code properties
     const possibleCodeProperties = [
       'code', 'id', 'municipality_code', 'MPIO_CDPMP', 'CODIGO_MPI', 
       'COD_DANE', 'DPTO_CCDGO', 'municipalityCode', 'dpt'
     ];
     
-    let municipalityCode = feature.id;
-    
     for (const prop of possibleCodeProperties) {
-      if (properties[prop]) {
-        municipalityCode = properties[prop].toString();
-        break;
+      if (properties[prop] && properties[prop].toString() === code.toString()) {
+        return feature;
       }
     }
     
-    if (!municipalityCode && properties.name) {
-      for (const [code, yearData] of Object.entries(municipalitiesData)) {
-        if (yearData[currentYear] && 
-            yearData[currentYear].name.toLowerCase() === properties.name.toLowerCase()) {
-          municipalityCode = code;
-          break;
+    // Check by name if code match fails
+    if (properties.NAME_2 || properties.name) {
+      const featureName = (properties.NAME_2 || properties.name || "").toLowerCase();
+      const municipalityName = municipalitiesData[code][currentYear]?.name.toLowerCase() || "";
+      
+      if (municipalityName && featureName === municipalityName) {
+        return feature;
+      }
+    }
+  }
+  
+  return null;
+}
+
+// Helper function to calculate centroid of a feature
+function getCentroid(feature) {
+  if (!feature.geometry || !feature.geometry.coordinates) return null;
+  
+  try {
+    const geometry = feature.geometry;
+    
+    // For Point
+    if (geometry.type === 'Point') {
+      return geometry.coordinates;
+    }
+    
+    // For Polygon
+    if (geometry.type === 'Polygon') {
+      // Simple average of first ring's coordinates
+      const coords = geometry.coordinates[0];
+      let sumX = 0;
+      let sumY = 0;
+      
+      for (const point of coords) {
+        sumX += point[0];
+        sumY += point[1];
+      }
+      
+      return [sumX / coords.length, sumY / coords.length];
+    }
+    
+    // For MultiPolygon - use the largest polygon
+    if (geometry.type === 'MultiPolygon') {
+      let maxArea = 0;
+      let bestCentroid = null;
+      
+      for (const polygon of geometry.coordinates) {
+        // Simple average of coordinates in the first ring
+        const coords = polygon[0];
+        let sumX = 0;
+        let sumY = 0;
+        
+        for (const point of coords) {
+          sumX += point[0];
+          sumY += point[1];
+        }
+        
+        const centroid = [sumX / coords.length, sumY / coords.length];
+        
+        // Rough area calculation
+        let area = 0;
+        for (let i = 0; i < coords.length - 1; i++) {
+          area += Math.abs(coords[i][0] * coords[i+1][1] - coords[i+1][0] * coords[i][1]);
+        }
+        
+        if (area > maxArea) {
+          maxArea = area;
+          bestCentroid = centroid;
         }
       }
+      
+      return bestCentroid;
     }
-    
-    const data = getMunicipalityData(municipalityCode, currentYear);
-    
-    feature.properties.dengueCases = data ? data.dengueCases : 0;
-    
-    return feature;
-  });
+  } catch (error) {
+    console.error('Error calculating centroid:', error);
+  }
   
-  // Update the source
-  map.getSource('municipalities').setData(updatedData);
+  return null;
 }
 
 // Show municipality information in the panel using CSV data
