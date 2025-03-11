@@ -26,6 +26,70 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     z-index:10;
   }
+
+
+  .header-content {
+    display: flex;
+    position: absolute;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 1200px;
+    align-items: center;
+  }
+  
+  /* Writeup button in the header */
+  .header-button {
+    background-color: #fff;
+    color: #0C2D48;
+    position: absolute;
+    left: 5em;
+    top: 1em;
+    border: none;
+    padding: 0.2rem 1rem;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+
+.header-button:hover {
+  background-color: #0C2D48; /* Invert colors */
+  color: #fff;
+  transform: scale(1.1); /* Slightly enlarge the button */
+}
+  
+  /* Styling for the writeup page container */
+  .writeup-container {
+    max-width: 600px;
+    margin: 50px auto;
+    padding: 2rem;
+    background-color: #fff;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .writeup-container h1 {
+    color: #0C2D48;
+    margin-bottom: 1rem;
+  }
+  
+  .writeup-container p {
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+    color: #333;
+  }
+  
+  /* Style for the 'Go back' button */
+  #go-back-button {
+    background-color: #0C2D48;
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+  }
   
   h1 {
     font-size: 1.5rem;
