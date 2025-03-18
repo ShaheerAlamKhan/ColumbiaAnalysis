@@ -98,16 +98,16 @@
   
   .container {
     display: flex;
-    height: calc(100vh - 60px); /* Account for header */
+    min-height: calc(100vh - 60px); /* Changed from height to min-height */
     position: relative;
   }
   
   /* Map container */
   #map {
-    position: fixed;
+    position: relative; /* Changed from fixed */
     flex: 1;
-    height: 80%;
-    width:72.5%;
+    height: 97vh; /* Use viewport height instead of percentage */
+    width: 72.5%;
   }
 
 
@@ -612,3 +612,56 @@
     transform: translateY(0);
   }
 }
+
+.analytics {
+  padding: 1rem;
+  background-color: #f9fafb;
+  margin-top: 1rem;
+}
+
+.analytics h2 {
+  color: #0C2D48;
+  font-size: 1.8rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.analytics p {
+  color: #4b5563;
+  text-align: center;
+  max-width: 800px;
+  margin: 0 auto 2rem auto;
+}
+
+.visualization-container {
+  margin: 2rem 0;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+/* Visualization styling */
+.viz-tooltip {
+  position: absolute;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  pointer-events: none;
+  font-size: 12px;
+  max-width: 250px;
+  z-index: 1000;
+}
+
+#vulnerability-drivers-viz {
+  width: 100%;
+  min-height: 600px;
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  margin-top: 20px;
+}
+

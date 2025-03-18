@@ -886,6 +886,10 @@ yearSlider.addEventListener('input', () => {
   }
   
   updateMapLayers();
+  //create a custom event when the time slider moves
+  window.dispatchEvent(new CustomEvent('yearChanged', { 
+    detail: { oldYear, newYear: currentYear } 
+  }));
 });
 
 // Time animation
@@ -924,6 +928,10 @@ playButton.addEventListener('click', () => {
         }
         
         updateMapLayers();
+        //create custom event
+        window.dispatchEvent(new CustomEvent('yearChanged', { 
+          detail: { oldYear, newYear: currentYear } 
+        }));
       } else {
         // Stop at the end
         clearInterval(animationTimer);

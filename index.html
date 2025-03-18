@@ -6,6 +6,7 @@
   <title>Colombia Socioeconomic Vulnerability Map</title>
   <!-- Mapbox GL JS CSS -->
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -18,7 +19,7 @@
   <div class="container">
     <!-- Container for Map -->
     <div id="map"></div>
-
+  
     <!-- Sidebar for controls -->
     <div id="ui-container">
       <div class="panel">
@@ -152,15 +153,17 @@
     </div>
   </div>
 
-  <div class="analytics">
-    <div class="map visualizations">
-      <h2>Additional Visualization</h2>
-      <p>This is a sample visualization below the map. You can add charts, graphs, or any other content here that explains more details or offers additional insights.</p>
-      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus sit amet libero at odio auctor blandit. Sed ultricies, mi nec pretium aliquet, magna orci dictum felis, non tincidunt risus urna id arcu. </p>
-      <!-- More content to demonstrate scrolling -->
-      <p>Nam mattis, arcu quis hendrerit sollicitudin, elit urna ullamcorper dui, at semper justo libero a lorem. Cras sit amet nisi eu purus ultrices gravida.</p>
+    <!-- First visualization - Vulnerability Drivers -->
+    <div class="analytics">
+      <h2>Vulnerability Analysis</h2>
+      <p>This analysis shows how vulnerability factors vary across different regions of Colombia.</p>
+      <div id="vulnerability-drivers-viz" class="visualization-container"></div>
     </div>
+    
+    <!-- Second visualization - Two Colombias Gap Analysis -->
+    <div id="two-colombias-container" class="visualization-container"></div>
   </div>
+  
 
 
   <!-- Mapbox GL JS -->
@@ -171,6 +174,20 @@
   <script src="colombia-facts.js"></script>
   <!--Animations-->
   <script src ="animation.js"></script>
+  <!--Viz 1-->
+  <script src="vulnerability-drivers.js"></script>
+  <script>
+  // Initialize visualization when the page is loaded
+  document.addEventListener('DOMContentLoaded', function() {
+    // Wait for map and data to be loaded before initializing visualizations
+    const checkInterval = setInterval(() => {
+      if (mapLoaded && csvLoaded) {
+        createVulnerabilityDriversVisualization('vulnerability-drivers-viz');
+        clearInterval(checkInterval);
+      }
+    }, 500);
+  });
+  </script>
   <!-- Your JS Code -->
   <script src="script.js"></script>
 </body>
