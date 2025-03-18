@@ -665,3 +665,8 @@
   margin-top: 20px;
 }
 
+.contributor-info{
+  font-style: italic;
+  color: #888;
+  font-size: medium;
+}
